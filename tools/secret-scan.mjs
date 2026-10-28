@@ -37,10 +37,15 @@ export function shannon(s) {
   return h;
 }
 
-/** True for long random-looking tokens that mix lower, upper and digits. */
+/**
+ * True for long random-looking tokens that mix lower, upper and digits.
+ * Requiring several digits keeps long CamelCase identifiers and import paths
+ * (e.g. generated type names) from being flagged.
+ */
 export function isHighEntropy(token) {
   if (token.length < ENTROPY_MIN_LEN) return false;
   if (!/[a-z]/.test(token) || !/[A-Z]/.test(token) || !/[0-9]/.test(token)) return false;
+  if ((token.match(/[0-9]/g) ?? []).length < 4) return false;
   return shannon(token) >= ENTROPY_THRESHOLD;
 }
 

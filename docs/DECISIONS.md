@@ -31,3 +31,27 @@ One short entry per non-obvious choice: decision, reason, alternative considered
 - **Decision:** `tools/secret-scan.mjs` scans the output of `git ls-files --cached --others --exclude-standard`.
 - **Reason:** catches secrets before the first `git add`, not only after.
 - **Alternative:** scanning only `git ls-files` (tracked), which misses new files.
+
+## D6. Repo topics not set
+
+- **Decision:** the repository has no topics.
+- **Reason:** the connected GitHub MCP (`github-personal`) has no topics or repo-update tool, and the prompt says "if supported".
+- **Alternative:** a direct REST call with the PAT; the owner can also add them in one click from the repo page.
+
+## D7. Method allowlist inside the JSON-RPC client
+
+- **Decision:** `AppServerClient.request()` only sends 13 allowlisted methods and refuses everything else, with an extra explicit check for `thread/shellCommand`, `command/exec*` and `process/*`.
+- **Reason:** makes "no phone-triggered path reaches an unsandboxed method" true by construction, not by code review.
+- **Alternative:** a denylist, which silently allows new dangerous methods in future Codex versions.
+
+## D8. Stop hook runs async with a short timeout
+
+- **Decision:** the installer writes the Stop hook with `async = true` and `timeout = 5`.
+- **Reason:** Codex docs say async hooks run in the background and can't control the turn, which is exactly an observer. The hook script also prints nothing and exits 0.
+- **Alternative:** a synchronous hook, which blocks every turn for up to the HTTP timeout when the companion is down.
+
+## D9. Fixtures are hand-built from one live capture
+
+- **Decision:** one live turn ("Reply with only the word PONG.") was captured to learn the exact event shapes; the six committed fixtures are hand-built in that shape with fictional content.
+- **Reason:** keeps Codex usage to one turn, and real captures contain MCP server names, paths and account details that must not be published.
+- **Alternative:** capturing all five scenarios live (about five turns and heavy redaction).
