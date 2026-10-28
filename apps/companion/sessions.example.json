@@ -1,0 +1,22 @@
+{
+  "sessions": [
+    {
+      "name": "Sole Harbor",
+      "cwd": "D:\\work\\sole-harbor",
+      "aliases": ["soul harbor"],
+      "sandbox": "workspace-write",
+      "approvalPolicy": "on-request"
+    },
+    {
+      "name": "Lead Tracker",
+      "cwd": "D:\\work\\lead-tracker",
+      "aliases": ["led tracker"]
+    },
+    {
+      "name": "Kernel Labs",
+      "cwd": "D:\\work\\kernel-labs",
+      "aliases": ["colonel labs"],
+      "sandbox": "read-only"
+    }
+  ]
+}

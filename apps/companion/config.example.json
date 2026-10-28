@@ -1,0 +1,7 @@
+{
+  "publicUrl": "https://your-pc.your-tailnet.example",
+  "port": 7417,
+  "hookPort": 7418,
+  "mode": "stdio",
+  "tts": { "rate": 1 }
+}

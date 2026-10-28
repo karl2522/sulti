@@ -13,6 +13,9 @@ import type { Transport } from "./transport.js";
 
 export type RpcId = string | number;
 
+/** Return this from a server-request handler to send no response at all. */
+export const NO_RESPONSE: unique symbol = Symbol("no-response");
+
 export class RpcError extends Error {
   constructor(
     message: string,
@@ -169,6 +172,7 @@ export class AppServerClient {
     }
     try {
       const result = await this.serverRequestHandler(method, params, id);
+      if (result === NO_RESPONSE) return;
       this.write({ id, result: result ?? {} });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
