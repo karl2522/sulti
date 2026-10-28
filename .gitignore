@@ -1,0 +1,30 @@
+# dependencies and build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# local Sulti data, never commit
+.sulti/
+sessions.json
+secrets.json
+devices.json
+threads.json
+config.local.json
+answers/
+*.log
+.env*
+test/live-output/
+tools/stt-bench/models/
+tools/stt-bench/audio/
+tools/stt-bench/results/
+
+# Codex credentials must never land here
+auth.json
+.codex/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

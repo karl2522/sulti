@@ -1,0 +1,16 @@
+{
+  "name": "@sulti/companion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "sulti": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@sulti/core": "0.1.0",
+    "@sulti/protocol": "0.1.0"
+  }
+}

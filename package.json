@@ -1,0 +1,30 @@
+{
+  "name": "sulti",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Voice-first iPhone remote for Codex sessions on Windows. Prototype.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/core",
+    "packages/protocol",
+    "apps/companion",
+    "apps/phone"
+  ],
+  "scripts": {
+    "build": "npm run build -w @sulti/core && npm run build -w @sulti/protocol && npm run build -w @sulti/companion && npm run build -w @sulti/phone",
+    "typecheck": "tsc -p tsconfig.json && tsc -p apps/phone/tsconfig.json",
+    "test": "vitest run",
+    "scan": "node tools/secret-scan.mjs",
+    "gen:protocol": "npm run gen -w @sulti/protocol",
+    "start": "node apps/companion/dist/cli.js start",
+    "smoke:live": "node apps/companion/dist/smoke-live.js"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  }
+}

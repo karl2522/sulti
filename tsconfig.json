@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "paths": {
+      "@sulti/core": ["./packages/core/src/index.ts"],
+      "@sulti/protocol": ["./packages/protocol/src/index.ts"]
+    }
+  },
+  "include": [
+    "packages/core/src",
+    "packages/protocol/src",
+    "apps/companion/src",
+    "test",
+    "tools/**/*.ts",
+    "vitest.config.ts"
+  ]
+}
