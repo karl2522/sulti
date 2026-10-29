@@ -84,11 +84,11 @@ export class SpeechQueue {
     return { status: this.status, answerId: this.answerId, index: this.index, total: this.chunks.length };
   }
 
-  /** Start reading a new answer from the top. */
-  start(answerId: string, chunks: string[]): void {
+  /** Start reading a new answer, from the top or from chunk `from`. */
+  start(answerId: string, chunks: string[], from = 0): void {
     this.chunks = chunks.map((c) => c.trim()).filter(Boolean);
     this.answerId = answerId;
-    this.index = 0;
+    this.index = Math.max(0, Math.min(from, this.chunks.length - 1));
     if (!this.chunks.length) {
       this.halt();
       this.set("done");
@@ -128,6 +128,13 @@ export class SpeechQueue {
   /** Alias used by the "read that again" voice command. */
   again(): void {
     this.restart();
+  }
+
+  /** Speak from chunk `index` (previous/next sentence, tap a sentence, new speed). */
+  jump(index: number): void {
+    if (!this.chunks.length) return;
+    this.index = Math.max(0, Math.min(index, this.chunks.length - 1));
+    this.speakCurrent(true);
   }
 
   stop(): void {

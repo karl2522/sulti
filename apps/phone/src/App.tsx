@@ -1,31 +1,35 @@
 import type { Answer, CompanionMessage, PhoneMessage } from "@sulti/core";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { Ctx, type AppCtx, type SheetSpec } from "./appContext.js";
 import { Connection } from "./connection.js";
-import { PairScreen, Unpaired } from "./PairScreen.js";
-import { planRoute, type AppAction, type RoutePlan } from "./routePlan.js";
+import { planRoute, type AppAction } from "./routePlan.js";
+import { navigate, param, useRoute } from "./router.js";
+import { Connect } from "./screens/Connect.js";
+import { Listen } from "./screens/Listen.js";
+import { SessionDetail } from "./screens/SessionDetail.js";
+import { Sessions } from "./screens/Sessions.js";
+import { Talk } from "./screens/Talk.js";
+import { SheetHost } from "./sheets/SheetHost.js";
 import { initialState, reducer, sessionName, type ToastLevel } from "./state.js";
-import { forgetDevice, loadDevice, loadSettings, saveDevice, saveSettings, type Device, type Settings } from "./storage.js";
+import { forgetDevice, isFreshDevice, loadDevice, loadHeard, loadSettings, saveDevice, saveHeard, saveSettings, type Device, type Settings } from "./storage.js";
+import { Toasts } from "./ui/parts.js";
 import { usePlayer } from "./usePlayer.js";
-import { BottomNav, Composer, ConfirmSheet, NowPlayingBar, SessionsView, SettingsView, TalkView, Toasts, TopBar, type View } from "./views.js";
 
 export function App() {
   const [device, setDevice] = useState<Device | null>(loadDevice);
-  const [path, setPath] = useState(location.pathname);
-
-  if (path === "/pair") {
+  // A paired phone opening an old pairing link just goes to the app.
+  if (device && location.pathname === "/pair") history.replaceState({ depth: 0 }, "", "/");
+  if (!device) {
     return (
-      <PairScreen
+      <Connect
         onPaired={(d) => {
           saveDevice(d);
-          // Drop the one-time code from the address bar and history.
-          history.replaceState(null, "", "/");
-          setPath("/");
+          history.replaceState({ depth: 0 }, "", "/");
           setDevice(d);
         }}
       />
     );
   }
-  if (!device) return <Unpaired />;
   return (
     <Main
       key={device.deviceToken}
@@ -38,124 +42,133 @@ export function App() {
   );
 }
 
-type PendingConfirm = Extract<RoutePlan, { kind: "confirm" } | { kind: "local" }>;
-
 /** Answers that arrive this soon after auth are the companion's backlog, not new. */
-const BACKLOG_WINDOW_MS = 1500;
-const TOAST_MS = 4500;
+const BACKLOG_MS = 1500;
 
 function Main({ device, onForget }: { device: Device; onForget: () => void }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [settings, setSettingsState] = useState<Settings>(loadSettings);
-  const [view, setView] = useState<View>("talk");
-  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
-  const [banner, setBanner] = useState<Answer | null>(null);
+  const [sheet, setSheet] = useState<SheetSpec | null>(null);
+  const [heard, setHeard] = useState(loadHeard);
+  const route = useRoute();
   const connRef = useRef<Connection | null>(null);
   const authedAt = useRef(0);
   const seen = useRef(new Set<string>());
   const tapped = useRef(false);
+  // A newly paired phone shouldn't greet you with every old answer as "ready".
+  const fresh = useRef(isFreshDevice());
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const sheetRef = useRef(sheet);
+  sheetRef.current = sheet;
+  const pathRef = useRef(route.path);
+  pathRef.current = route.path;
 
   const notify = useCallback((level: ToastLevel, message: string) => dispatch({ type: "toast", level, message }), []);
   const send = useCallback(
     (m: PhoneMessage) => {
       const ok = connRef.current?.send(m) ?? false;
-      if (!ok) notify("warn", "Not connected to the PC right now.");
+      if (!ok) notify("warn", "Not connected to your PC right now.");
       return ok;
     },
     [notify],
   );
   const player = usePlayer(settings, send, notify);
-
-  const setSettings = (s: Settings) => {
+  const setSettings = useCallback((s: Settings) => {
     saveSettings(s);
     setSettingsState(s);
-  };
+  }, []);
+  const markHeard = useCallback(
+    (id: string) =>
+      setHeard((h) => {
+        if (h.has(id)) return h;
+        const next = new Set(h).add(id);
+        saveHeard(next);
+        return next;
+      }),
+    [],
+  );
+  const listen = useCallback(
+    (a: Answer, fromUnit?: number) => {
+      markHeard(a.id);
+      player.play(a, sessionName(stateRef.current, a.sessionId), fromUnit);
+    },
+    [markHeard, player],
+  );
+  const copyOnPhone = useCallback(
+    (text: string) => {
+      navigator.clipboard.writeText(text).then(
+        () => notify("info", "Copied."),
+        () => notify("warn", "Your phone blocked copying. Try again from the copy button."),
+      );
+    },
+    [notify],
+  );
+  const openSheet = useCallback((s: SheetSpec) => setSheet(s), []);
+  const closeSheet = useCallback(() => setSheet(null), []);
 
-  const stateRef = useRef(state);
-  stateRef.current = state;
-  const settingsRef = useRef(settings);
-  settingsRef.current = settings;
-
-  const latestAnswer = (): Answer | null => {
-    const s = stateRef.current;
-    return s.answers.find((a) => a.sessionId === s.activeSessionId) ?? s.answers[0] ?? null;
-  };
-
-  const copyOnPhone = async (a: Answer) => {
-    try {
-      await navigator.clipboard.writeText(a.text);
-      notify("info", "Copied.");
-    } catch {
-      notify("warn", "The phone blocked copying. Tap Copy on phone on the answer.");
-    }
-  };
-
+  // Voice commands that act on the phone itself.
   const runLocal = (action: Exclude<AppAction, { type: "switchSession" }>) => {
-    const latest = latestAnswer();
-    const title = latest ? sessionName(stateRef.current, latest.sessionId) : "";
-    switch (action.type) {
-      case "playback":
-        switch (action.playback) {
-          case "read":
-            return latest ? player.play(latest, title) : notify("info", "No answers yet.");
-          case "again":
-          case "restart":
-            if (player.now) return player.restart();
-            return latest ? player.play(latest, title) : notify("info", "No answers yet.");
-          case "pause":
-            return player.pause();
-          case "resume":
-            return player.resume();
-          case "stop":
-            return player.stop();
-        }
-        return;
-      case "copy":
-        if (!latest) return notify("info", "No answers to copy yet.");
-        if (action.target === "phone") return void copyOnPhone(latest);
-        if (action.target === "pc") return void send({ type: "answer.copyToPc", answerId: latest.id });
-        setView("talk");
-        return notify("info", "Use Copy on phone or Copy to PC on the answer.");
-      case "showApprovals":
-        setView("talk");
-        if (!stateRef.current.approvals.length) return notify("info", "Nothing is waiting for approval.");
-        requestAnimationFrame(() => document.getElementById("approvals")?.scrollIntoView({ behavior: "smooth" }));
-        return;
+    const s = stateRef.current;
+    const latest = s.answers.find((a) => a.sessionId === s.activeSessionId) ?? s.answers[0];
+    if (action.type === "showApprovals") return s.approvals.length ? openSheet({ kind: "approval" }) : notify("info", "Nothing is waiting for approval.");
+    if (!latest) return notify("info", "No answers yet.");
+    if (action.type === "copy") {
+      if (action.target === "phone") return copyOnPhone(latest.text);
+      if (action.target === "pc") return void send({ type: "answer.copyToPc", answerId: latest.id });
+      return openSheet({ kind: "copy", answer: latest });
     }
-  };
-
-  const onNewAnswer = (a: Answer) => {
-    if (seen.current.has(a.id)) return;
-    seen.current.add(a.id);
-    if (Date.now() - authedAt.current < BACKLOG_WINDOW_MS) return;
-    player.prefetch(a);
-    const mode = settingsRef.current.autoRead;
-    if (mode === "auto" && tapped.current) player.play(a, sessionName(stateRef.current, a.sessionId));
-    else if (mode !== "off") setBanner(a);
+    const p = action.playback;
+    if (p === "pause") return player.pause();
+    if (p === "resume") return player.resume();
+    if (p === "stop") return player.stop();
+    if ((p === "again" || p === "restart") && player.now) return player.restart();
+    listen(latest);
   };
 
   const handle = (m: CompanionMessage) => {
+    const backlog = Date.now() - authedAt.current < BACKLOG_MS;
     switch (m.type) {
       case "auth.ok":
         authedAt.current = Date.now();
         return;
       case "answer": {
         const { type: _t, ...a } = m;
-        return onNewAnswer(a);
+        if (seen.current.has(a.id)) return;
+        seen.current.add(a.id);
+        if (backlog) return void (fresh.current && markHeard(a.id));
+        player.prefetch(a);
+        if (settingsRef.current.autoRead === "auto" && tapped.current) return listen(a);
+        // Home and that session's own page already show it.
+        const p = pathRef.current;
+        if (p !== "/" && p !== "/s/" + encodeURIComponent(a.sessionId)) notify("info", sessionName(stateRef.current, a.sessionId) + " answered.");
+        return;
       }
       case "audio.url":
         return player.onAudioUrl(m.answerId, m.url);
       case "approval.request":
-        if (Date.now() - authedAt.current > BACKLOG_WINDOW_MS) notify("warn", `${sessionName(stateRef.current, m.sessionId)} needs your approval.`);
-        return;
+        if (backlog) return;
+        if (!sheetRef.current) return openSheet({ kind: "approval", requestId: m.requestId });
+        return notify("warn", sessionName(stateRef.current, m.sessionId) + " needs your approval.");
       case "route.result": {
         const plan = planRoute(m);
-        if (plan.kind === "confirm") return setPendingConfirm(plan);
-        if (plan.kind === "pickSession") {
-          setView("sessions");
-          return notify("info", `Which session? I heard "${plan.spoken}".`);
-        }
-        if (plan.kind === "local") return plan.confirm ? setPendingConfirm(plan) : runLocal(plan.action);
+        const confirm = (onAccept?: () => void) =>
+          openSheet({
+            kind: "confirm",
+            echo: plan.echo,
+            onAnswer: (accept) => {
+              if ("routeId" in plan) send({ type: "route.confirm", routeId: plan.routeId, accept });
+              if (accept) onAccept?.();
+            },
+          });
+        if (plan.kind === "confirm") return confirm();
+        if (plan.kind === "pickSession")
+          return openSheet({ kind: "pickSession", title: "Which session? I heard “" + plan.spoken + "”", onPick: (id) => send({ type: "session.select", sessionId: id }) });
+        if (plan.kind === "local") return plan.confirm ? confirm(() => runLocal(plan.action)) : runLocal(plan.action);
+        if (m.intent.kind === "prompt") notify("info", "Sent to " + sessionName(stateRef.current, m.intent.sessionId) + ".");
+        else if (m.intent.kind === "codex") notify("info", plan.echo);
         return;
       }
       default:
@@ -186,60 +199,40 @@ function Main({ device, onForget }: { device: Device; onForget: () => void }) {
 
   // Any tap counts as the gesture iOS needs before automatic speech.
   useEffect(() => {
-    const onTap = () => {
-      tapped.current = true;
-    };
+    const onTap = () => void (tapped.current = true);
     window.addEventListener("pointerdown", onTap, { once: true });
     return () => window.removeEventListener("pointerdown", onTap);
   }, []);
 
-  useEffect(() => {
-    if (!state.toasts.length) return;
-    const t = state.toasts[0]!;
-    const timer = setTimeout(() => dispatch({ type: "dismissToast", id: t.id }), TOAST_MS);
-    return () => clearTimeout(timer);
-  }, [state.toasts]);
+  const ctx: AppCtx = { state, device, settings, setSettings, send, notify, player, heard, markHeard, listen, copyOnPhone, sheet, openSheet, closeSheet, forget: onForget };
 
-  const answerConfirm = (accept: boolean) => {
-    const p = pendingConfirm;
-    setPendingConfirm(null);
-    if (!p) return;
-    send({ type: "route.confirm", routeId: p.routeId, accept });
-    if (accept && p.kind === "local") runLocal(p.action);
-  };
-
-  const active = state.sessions.find((s) => s.id === state.activeSessionId) ?? null;
+  const id = (prefix: string) => param(route.path, prefix);
+  let screen;
+  if (route.path === "/") screen = <Sessions />;
+  else if (id("/s/")) screen = <SessionDetail id={id("/s/")!} />;
+  else if (id("/a/")) screen = <Listen answerId={id("/a/")!} />;
+  else if (route.path === "/talk") screen = <Talk query={route.query} />;
+  else {
+    queueMicrotask(() => navigate("/", { replace: true }));
+    screen = null;
+  }
+  const motion = route.path === "/talk" && route.direction === "forward" ? "up" : route.direction;
 
   return (
-    <div className="app">
-      <TopBar state={state} active={active} />
-      <main className="main">
-        {view === "talk" && (
-          <TalkView
-            state={state}
-            active={active}
-            send={send}
-            player={player}
-            banner={banner}
-            onBanner={(play) => {
-              if (play && banner) player.play(banner, sessionName(state, banner.sessionId));
-              setBanner(null);
-            }}
-            onApprovalSent={(requestId) => dispatch({ type: "approvalSent", requestId })}
-            onCopyPhone={(a) => void copyOnPhone(a)}
-          />
+    <Ctx.Provider value={ctx}>
+      <div className="app">
+        {state.conn === "offline" && (
+          <div className="offline" role="status">
+            Can't reach your PC. Retrying…
+          </div>
         )}
-        {view === "sessions" && <SessionsView state={state} send={send} />}
-        {view === "settings" && <SettingsView settings={settings} onChange={setSettings} player={player} device={device} state={state} onForget={onForget} />}
-      </main>
-      <footer className="dock">
-        {player.now && <NowPlayingBar now={player.now} player={player} />}
-        {view === "talk" && active && !active.unlisted && <Composer state={state} active={active} send={send} />}
-        <BottomNav view={view} onView={setView} approvals={state.approvals.length} />
-      </footer>
-      <audio ref={player.audioRef} preload="none" playsInline />
-      {pendingConfirm && <ConfirmSheet echo={pendingConfirm.echo} onAnswer={answerConfirm} />}
-      <Toasts toasts={state.toasts} onDismiss={(id) => dispatch({ type: "dismissToast", id })} />
-    </div>
+        <div key={route.key} className={"page page-" + motion}>
+          {screen}
+        </div>
+        <SheetHost />
+        <Toasts toasts={state.toasts} onDismiss={(tid) => dispatch({ type: "dismissToast", id: tid })} />
+        <audio ref={player.audioRef} preload="none" playsInline />
+      </div>
+    </Ctx.Provider>
   );
 }

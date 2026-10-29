@@ -139,4 +139,15 @@ describe("SpeechQueue", () => {
     q.start("a1", ["  ", "Hi."]);
     expect(seen).toEqual([["Hi.", { rate: 1.3, voiceName: "Samantha" }]]);
   });
+
+  it("starts mid-answer and jumps between sentences, cancelling first", () => {
+    const { synth, q } = setup();
+    q.start("a1", ["One.", "Two.", "Three."], 1);
+    expect(q.state).toMatchObject({ status: "playing", index: 1 });
+    q.jump(9);
+    expect(q.state.index).toBe(2);
+    synth.spoken[0]!.h.onEnd(); // stale "Two." ending must not advance
+    expect(q.state.index).toBe(2);
+    expect(synth.log).toEqual(["cancel", "speak:Two.", "cancel", "speak:Three."]);
+  });
 });

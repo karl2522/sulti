@@ -9,6 +9,7 @@ export interface Device {
 
 export type PlaybackMode = "A" | "B";
 export type AutoRead = "off" | "tap" | "auto";
+export type TextSize = "s" | "m" | "l";
 
 export interface Settings {
   /** A: Web Speech on the phone. B: audio rendered on the PC. */
@@ -18,12 +19,16 @@ export interface Settings {
   /** off (default), after a tap on the "new answer" banner, or automatic. */
   autoRead: AutoRead;
   readCodeBlocks: boolean;
+  /** Reader text size. */
+  textSize: TextSize;
 }
 
-export const DEFAULT_SETTINGS: Settings = { mode: "A", voiceName: null, rate: 1, autoRead: "off", readCodeBlocks: false };
+export const DEFAULT_SETTINGS: Settings = { mode: "A", voiceName: null, rate: 1, autoRead: "off", readCodeBlocks: false, textSize: "m" };
 
 const DEVICE_KEY = "sulti.device";
 const SETTINGS_KEY = "sulti.settings";
+const HEARD_KEY = "sulti.heard";
+const MAX_HEARD = 300;
 
 function read<T>(key: string): Partial<T> | null {
   try {
@@ -56,9 +61,25 @@ export function loadSettings(): Settings {
     rate: typeof s.rate === "number" && s.rate >= 0.5 && s.rate <= 2 ? s.rate : 1,
     autoRead: s.autoRead === "tap" || s.autoRead === "auto" ? s.autoRead : "off",
     readCodeBlocks: s.readCodeBlocks === true,
+    textSize: s.textSize === "s" || s.textSize === "l" ? s.textSize : "m",
   };
 }
 
 export function saveSettings(s: Settings): void {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+
+/** Answers already opened or played, so the rest can show "Answer ready". */
+export function loadHeard(): Set<string> {
+  const list = read<string[]>(HEARD_KEY);
+  return new Set(Array.isArray(list) ? list.filter((x): x is string => typeof x === "string") : []);
+}
+
+export function saveHeard(ids: Set<string>): void {
+  localStorage.setItem(HEARD_KEY, JSON.stringify([...ids].slice(-MAX_HEARD)));
+}
+
+/** True on a phone's first run, before it has heard anything. */
+export function isFreshDevice(): boolean {
+  return localStorage.getItem(HEARD_KEY) === null;
 }
