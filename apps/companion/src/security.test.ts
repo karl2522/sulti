@@ -58,6 +58,19 @@ describe("pairing and auth", () => {
     expect(p.verify(res.deviceToken)).toBeNull();
     expect(p.revoke(res.deviceId)).toBe(false);
   });
+
+  it("honors a revoke from another process without a restart, and never resurrects it", () => {
+    const dir = tmp();
+    const running = new Pairing(dir); // the companion
+    const a = running.exchange(running.createCode(), "a");
+    if (!a.ok) throw new Error("pair failed");
+    expect(running.verify(a.deviceToken)).not.toBeNull();
+    expect(new Pairing(dir).revoke(a.deviceId)).toBe(true); // `npm run devices -- revoke`
+    expect(running.verify(a.deviceToken)).toBeNull();
+    const b = running.exchange(running.createCode(), "b"); // a later pairing saves the list
+    expect(b.ok).toBe(true);
+    expect(new Pairing(dir).list().map((d) => d.name)).toEqual(["b"]);
+  });
 });
 
 describe("signed audio URLs", () => {

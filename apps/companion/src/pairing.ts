@@ -19,7 +19,12 @@ const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 
 export type PairResult = { ok: true; deviceId: string; deviceToken: string } | { ok: false; status: 400 | 401 | 429; error: string };
 
-/** One-time pairing codes and the device registry (devices.json). */
+/**
+ * One-time pairing codes and the device registry (devices.json).
+ * devices.json is re-read before every use: `npm run devices -- revoke` runs in
+ * another process, and a cached copy would keep accepting the revoked token and
+ * write it back on the next save.
+ */
 export class Pairing {
   private readonly file: string;
   private devices: DeviceRecord[];
@@ -61,6 +66,7 @@ export class Pairing {
       return { ok: false, status: 401, error: "Pairing code expired or already used." };
     }
     this.codes.delete(h); // single use
+    this.reload();
     const deviceToken = randomBytes(32).toString("base64url");
     const name = typeof deviceName === "string" && deviceName.trim() ? deviceName.trim().slice(0, 60) : "iPhone";
     const rec: DeviceRecord = { id: randomUUID().slice(0, 8), name, tokenHash: sha256(deviceToken), createdAt: now, lastSeenAt: null };
@@ -72,6 +78,7 @@ export class Pairing {
   /** Device for a token, or null. Constant-time compare on the hashes. */
   verify(token: unknown): DeviceRecord | null {
     if (typeof token !== "string" || token.length < 16 || token.length > 200) return null;
+    this.reload();
     const h = Buffer.from(sha256(token));
     for (const d of this.devices) {
       const stored = Buffer.from(d.tokenHash);
@@ -85,15 +92,21 @@ export class Pairing {
   }
 
   list(): DeviceRecord[] {
+    this.reload();
     return this.devices.map((d) => ({ ...d }));
   }
 
   revoke(id: string): boolean {
+    this.reload();
     const before = this.devices.length;
     this.devices = this.devices.filter((d) => d.id !== id);
     if (this.devices.length === before) return false;
     this.save();
     return true;
+  }
+
+  private reload(): void {
+    this.devices = readJson<DeviceRecord[]>(this.file, []);
   }
 
   private save(): void {
