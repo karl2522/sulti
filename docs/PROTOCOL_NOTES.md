@@ -68,3 +68,26 @@ Sources: `codex --help`, `codex app-server --help`, `codex features list`, the t
 | Working directory | Hook commands run with the session `cwd`. |
 | `session_id` vs thread id | The docs example uses the thread id (`thr_…`). Sulti dedupes by `turn_id`, which matches the app-server turn id. The owner can confirm the field names with `stop-hook.mjs --debug`. |
 | Legacy `notify` | Not used. The Stop hook gives the same final message plus `turn_id` and `cwd`. |
+
+## Stop hook, verified live on Windows
+
+Checked with Codex 0.165.0 on the build machine, using the hook in `--debug` mode against a temporary data folder:
+
+- **Payload.** The hook received one JSON object on **stdin** (about 350 bytes for a short answer). Its keys were `cwd`, `hook_event_name` (`"Stop"`), `last_assistant_message`, `model`, `permission_mode`, `session_id`, `stop_hook_active`, `transcript_path` and `turn_id`. Nothing arrived on argv.
+- **Command quoting on Windows.** Hook commands run through PowerShell. A command that *starts* with a quoted executable path (`"C:\…\node.exe" "…\stop-hook.mjs"`) fails, because PowerShell parses it as a string expression. An **unquoted** node path followed by a quoted script path works. The installer therefore resolves symlinked node installs (fnm, nvm) to the real `node.exe`, and uses its 8.3 short path when it contains spaces.
+- **`command_windows` and `async = true`.** Both work. The async hook ran after the turn without delaying it.
+- **Trust.** The hook did nothing until it was trusted with `/hooks` (see "Trust" above).
+
+## Shared mode, verified live (T5)
+
+From `tools/shared-session/two-clients.ts`, run against a server it spawned on loopback with a temporary capability token:
+
+- **Auth.** A WebSocket client without the token is refused during the handshake with HTTP **401**. With the token, `initialize` succeeds.
+- **Resume timing.** **Difference:** `thread/resume` on a persisted thread that has had no turn yet fails with `no rollout found for thread id …`, even while the thread is loaded on the same server. A second client can attach only once the first turn has started.
+- **Live events after resume.** A second client that resumes **while a turn is running** receives the rest of that turn live: `item/started`, `item/agentMessage/delta`, the agent message's `item/completed`, `thread/tokenUsage/updated` and `turn/completed`. Notifications for a thread go to every client subscribed to it, not only to the client that started the turn.
+- **Extra notifications.** After `thread/resume` the resuming client also got a `deprecationNotice`, most likely about full-history hydration on resume (`excludeTurns` plus `thread/turns/list` is the suggested replacement). Sulti ignores it. Both clients also see account, MCP and `remoteControl/status/changed` notifications, which Sulti ignores.
+- **Process tree.** Through an npm install, `codex app-server` runs as `node codex.js` with a native `codex.exe` child. Killing only the node process leaves the listener alive, so the test stops the server with `taskkill /T`.
+
+## Installed copies of Codex
+
+The build machine had three copies of `codex`: the npm CLI (0.165.0), a copy bundled with the desktop app in its own `bin` folder (0.140.0), and the desktop app's internal app-server builds. The 0.140 copy can't parse the current `config.toml`; it fails with `invalid type: map, expected a boolean` on a newer `[features]` entry. Sulti resolves `codex` in PATH order like `cmd.exe` (D10), so it runs the same CLI the owner gets in a terminal.
