@@ -69,13 +69,18 @@ describe.skipIf(!isWin)("spawning on Windows", () => {
     expect(JSON.parse(out)).toEqual(tricky);
   });
 
-  it("prefers codex.exe over codex.cmd on PATH", () => {
+  it("resolves like cmd.exe: PATH order first, then .exe before .cmd", () => {
     const a = mkdtempSync(join(tmpdir(), "sulti-path-a-"));
     const b = mkdtempSync(join(tmpdir(), "sulti-path-b-"));
     writeFileSync(join(a, "fakecodex.cmd"), "@echo off\r\n");
     writeFileSync(join(b, "fakecodex.exe"), "");
-    expect(resolveExecutable("fakecodex", { Path: `${a};${b}` }, "win32")).toEqual({ file: join(b, "fakecodex.exe"), kind: "exe" });
+    // An npm shim earlier on PATH wins over an older .exe further down.
+    expect(resolveExecutable("fakecodex", { Path: `${a};${b}` }, "win32")).toEqual({ file: join(a, "fakecodex.cmd"), kind: "cmd" });
+    expect(resolveExecutable("fakecodex", { Path: `${b};${a}` }, "win32")).toEqual({ file: join(b, "fakecodex.exe"), kind: "exe" });
     expect(resolveExecutable("fakecodex", { Path: a }, "win32")).toEqual({ file: join(a, "fakecodex.cmd"), kind: "cmd" });
+    // Within one directory the .exe wins.
+    writeFileSync(join(a, "fakecodex.exe"), "");
+    expect(resolveExecutable("fakecodex", { Path: `${a};${b}` }, "win32")).toEqual({ file: join(a, "fakecodex.exe"), kind: "exe" });
     expect(resolveExecutable("nope-not-here", { Path: a }, "win32")).toBeNull();
   });
 

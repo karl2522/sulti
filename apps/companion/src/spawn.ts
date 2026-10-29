@@ -40,19 +40,19 @@ export function resolveExecutable(name: string, env: NodeJS.ProcessEnv = process
     return null;
   }
   const dirs = (env.Path ?? env.PATH ?? "").split(";").filter(Boolean);
-  // 1. A native executable on PATH.
+  // Same order as typing the name in cmd.exe: PATH directories in order, and
+  // within one directory .exe before .cmd/.bat. Searching every directory for
+  // an .exe first would pick a stale desktop-app copy that sits later on PATH
+  // over the npm CLI the owner actually runs (seen live: 0.140 vs 0.165).
   for (const dir of dirs) {
-    const f = join(dir, name + ".exe");
-    if (existsSync(f)) return { file: f, kind: "exe" };
-  }
-  // 2. A .cmd/.bat shim on PATH (npm installs).
-  for (const dir of dirs) {
+    const exe = join(dir, name + ".exe");
+    if (existsSync(exe)) return { file: exe, kind: "exe" };
     for (const ext of [".cmd", ".bat"]) {
       const f = join(dir, name + ext);
       if (existsSync(f)) return { file: f, kind: "cmd" };
     }
   }
-  // 3. Last resort: the copy bundled with the Codex desktop app, which can lag behind the CLI.
+  // Last resort: the copy bundled with the Codex desktop app, which can lag behind the CLI.
   if (env.LOCALAPPDATA) {
     const f = join(env.LOCALAPPDATA, "Programs", "OpenAI", "Codex", "bin", name + ".exe");
     if (existsSync(f)) return { file: f, kind: "exe" };
