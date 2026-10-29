@@ -20,6 +20,9 @@
     "scan": "node tools/secret-scan.mjs",
     "gen:protocol": "npm run gen -w @sulti/protocol",
     "start": "node apps/companion/dist/cli.js start",
+    "pair": "node apps/companion/dist/cli.js pair",
+    "devices": "node apps/companion/dist/cli.js devices",
+    "dev:phone": "npm run dev -w @sulti/phone",
     "smoke:live": "node apps/companion/dist/smoke-live.js"
   },
   "devDependencies": {
