@@ -24,6 +24,8 @@ export const SessionInfo = z.object({
   /** true for folders that sent a Stop-hook answer but are not in sessions.json */
   unlisted: z.boolean(),
   threadId: z.string().nullable(),
+  /** When the current status began (ms since epoch), for "Working for 2 min". */
+  since: z.number().nullable().optional(),
 });
 export type SessionInfo = z.infer<typeof SessionInfo>;
 
@@ -64,6 +66,16 @@ export const ThreadSummary = z.object({
   updatedAt: z.number(),
 });
 export type ThreadSummary = z.infer<typeof ThreadSummary>;
+
+/** One line of "what Codex is doing right now", derived from command and file-change items. */
+export const ActivityItem = z.object({
+  id,
+  kind: z.enum(["read", "search", "list", "command", "edit"]),
+  text: z.string().max(500),
+  status: z.enum(["running", "done", "failed"]),
+  at: z.number(),
+});
+export type ActivityItem = z.infer<typeof ActivityItem>;
 
 export const PlaybackAction = z.enum(["read", "again", "pause", "resume", "restart", "stop"]);
 export type PlaybackAction = z.infer<typeof PlaybackAction>;
@@ -151,15 +163,18 @@ export const ApprovalRequest = z.object({
   sessionId: id,
   kind: ApprovalKind,
   summary: z.string(),
+  /** Codex's own explanation of why it needs approval, when it gave one. */
+  reason: z.string().max(2000).optional(),
   command: z.string().optional(),
   cwd: z.string().optional(),
 });
 export type ApprovalRequest = z.infer<typeof ApprovalRequest>;
 
 export const CompanionMessage = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("auth.ok"), deviceId: z.string(), appName: z.string(), version: z.string() }),
+  z.object({ type: z.literal("auth.ok"), deviceId: z.string(), appName: z.string(), version: z.string(), host: z.string().max(100).optional() }),
   z.object({ type: z.literal("sessions"), sessions: z.array(SessionInfo), activeSessionId: z.string().nullable() }),
-  z.object({ type: z.literal("session.status"), sessionId: id, status: SessionStatus }),
+  z.object({ type: z.literal("session.status"), sessionId: id, status: SessionStatus, since: z.number().optional() }),
+  z.object({ type: z.literal("activity"), sessionId: id, items: z.array(ActivityItem).max(20) }),
   Answer.extend({ type: z.literal("answer") }),
   z.object({ type: z.literal("route.result"), routeId: id, intent: Intent, echo: z.string(), needsConfirm: z.boolean() }),
   z.object({ type: z.literal("skills"), sessionId: id, skills: z.array(SkillInfo) }),

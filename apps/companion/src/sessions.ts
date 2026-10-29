@@ -62,6 +62,7 @@ export function loadSessions(dataDir: string): Session[] {
 export class SessionRegistry {
   private readonly sessions = new Map<string, Session>();
   private readonly status = new Map<string, SessionStatus>();
+  private readonly statusSince = new Map<string, number>();
 
   constructor(configured: Session[]) {
     for (const s of configured) this.sessions.set(s.id, s);
@@ -105,12 +106,18 @@ export class SessionRegistry {
   setStatus(id: string, st: SessionStatus): boolean {
     if (this.getStatus(id) === st) return false;
     this.status.set(id, st);
+    this.statusSince.set(id, Date.now());
     return true;
+  }
+
+  /** When the current status began, or null if it never changed since startup. */
+  since(id: string): number | null {
+    return this.statusSince.get(id) ?? null;
   }
 
   info(id: string, threadId: string | null): SessionInfo | null {
     const s = this.sessions.get(id);
     if (!s) return null;
-    return { id: s.id, name: s.name, aliases: s.aliases, status: this.getStatus(id), unlisted: s.unlisted, threadId };
+    return { id: s.id, name: s.name, aliases: s.aliases, status: this.getStatus(id), unlisted: s.unlisted, threadId, since: this.since(id) };
   }
 }

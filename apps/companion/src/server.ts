@@ -1,6 +1,7 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { hostname } from "node:os";
 import { extname, join, normalize, resolve, sep } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { APP_NAME, APP_VERSION, LOOPBACK_HOST, parsePhoneMessage, type CompanionMessage } from "@sulti/core";
@@ -204,7 +205,7 @@ export function startPhoneServer(d: PhoneServerDeps, port: number): Promise<Runn
         if (!device) return ws.close(4401, "unauthorized");
         client = { deviceId: device.id, send };
         remove = d.hub.addClient(client);
-        send({ type: "auth.ok", deviceId: device.id, appName: APP_NAME, version: APP_VERSION });
+        send({ type: "auth.ok", deviceId: device.id, appName: APP_NAME, version: APP_VERSION, host: hostname().slice(0, 100) });
         void d.hub.welcome(client);
         return;
       }

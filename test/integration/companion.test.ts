@@ -72,7 +72,11 @@ describe("companion against the mock app-server", () => {
     const req = (await phone.waitFor("approval.request")) as Of<"approval.request">;
     expect(req).toMatchObject({ sessionId: "sole-harbor", kind: "command", command: "npm test" });
     expect(req.summary).toContain("Run: npm test");
-    await phone.waitFor((m) => m.type === "session.status" && m.status === "waitingApproval");
+    expect(req.reason).toBe("Run the test suite outside the sandbox?");
+    const st = (await phone.waitFor((m) => m.type === "session.status" && m.status === "waitingApproval")) as Of<"session.status">;
+    expect(st.since).toBeGreaterThan(0);
+    // The command shows up in the session's "right now" list while it waits.
+    await phone.waitFor((m) => m.type === "activity" && m.items.some((i) => i.kind === "command" && i.text === "npm test" && i.status === "running"));
 
     // Saying "approve" only shows approvals.
     const mark = phone.mark();
@@ -86,6 +90,7 @@ describe("companion against the mock app-server", () => {
     await phone.waitFor((m) => m.type === "approval.resolved" && m.requestId === req.requestId);
     const a = (await phone.waitFor("answer")) as Of<"answer">;
     expect(a.text).toBe("I ran the test suite: 12 tests passed.");
+    await phone.waitFor((m) => m.type === "activity" && m.items.some((i) => i.text === "npm test" && i.status === "done"));
     expect(t.mockLog().find((e) => "response" in e)).toMatchObject({ result: { decision: "accept" } });
   });
 
@@ -329,6 +334,7 @@ describe("pairing and WebSocket auth over the wire", () => {
     const first = await Phone.open(t.c.phone.port);
     first.send({ type: "auth", deviceToken: token });
     const auth = (await first.waitFor("auth.ok")) as Of<"auth.ok">;
+    expect(auth.host).toBeTruthy();
     first.close();
     expect(t.c.pairing.revoke(auth.deviceId)).toBe(true);
     const second = await Phone.open(t.c.phone.port);

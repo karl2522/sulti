@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { extname } from "node:path";
-import { APP_NAME, APP_SLUG, APP_VERSION } from "@sulti/core";
+import { APP_NAME, APP_SLUG, APP_VERSION, type ActivityItem } from "@sulti/core";
 import { AppServerClient, NO_RESPONSE, connectWebSocket, stdioTransport, type V2 } from "@sulti/protocol";
+import { toActivity } from "./activity.js";
 import { APP_SERVER_DOWN } from "./errors.js";
 import type { Session } from "./sessions.js";
 import { resolveCodex, spawnResolved, type ResolvedCommand } from "./spawn.js";
@@ -145,6 +146,7 @@ export interface PendingApproval {
   sessionId: string;
   kind: "command" | "fileChange";
   summary: string;
+  reason?: string;
   command?: string;
   cwd?: string;
   resolve: (v: unknown) => void;
@@ -155,6 +157,7 @@ export interface BridgeEvents {
   outcome(sessionId: string, outcome: TurnOutcome): void;
   approvalRequest(a: PendingApproval): void;
   approvalResolved(requestId: string): void;
+  activity(sessionId: string, item: ActivityItem): void;
   goal(sessionId: string, goal: V2.ThreadGoal | null): void;
   delta(sessionId: string, turnId: string): void;
   toast(level: "info" | "warn" | "error", message: string): void;
@@ -392,6 +395,10 @@ export class CodexBridge {
       default:
         break;
     }
+    if ((method === "item/started" || method === "item/completed") && sid) {
+      const a = toActivity(p.item, Date.now());
+      if (a) this.events.activity(sid, a);
+    }
     const outcome = this.tracker.feed(method, params);
     if (outcome) {
       if (threadId) this.activeTurn.delete(threadId);
@@ -432,7 +439,6 @@ export class CodexBridge {
       summary = files.length ? `Edit ${files.length} file${files.length === 1 ? "" : "s"}: ${names.slice(0, 5).join(", ")}${files.length > 5 ? ", …" : ""}` : "Apply file changes";
       if (typeof p.grantRoot === "string" && p.grantRoot) summary += `, and allow writes under ${p.grantRoot}`;
     }
-    if (reason) summary += `. ${reason}`;
     return new Promise((resolve) => {
       const a: PendingApproval = {
         requestId: `appr-${Date.now().toString(36)}-${++this.seq}`,
@@ -442,6 +448,7 @@ export class CodexBridge {
         sessionId,
         kind,
         summary,
+        ...(reason ? { reason } : {}),
         ...(command ? { command } : {}),
         ...(typeof p.cwd === "string" ? { cwd: p.cwd } : {}),
         resolve,

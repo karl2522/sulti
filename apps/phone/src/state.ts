@@ -106,6 +106,8 @@ function onMessage(s: AppState, m: CompanionMessage): AppState {
       return toast(s, m.level, m.message);
     case "audio.url":
       return s; // handled by the player
+    case "activity":
+      return s; // shown by the session screen (next commit)
   }
 }
 

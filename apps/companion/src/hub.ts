@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { route, type CompanionMessage, type Goal, type Intent, type PhoneMessage, toSpeechText } from "@sulti/core";
+import { route, type ActivityItem, type CompanionMessage, type Goal, type Intent, type PhoneMessage, toSpeechText } from "@sulti/core";
 import type { V2 } from "@sulti/protocol";
+import { upsertActivity } from "./activity.js";
 import type { AnswerStore } from "./answers.js";
 import { CodexBridge, type PendingApproval } from "./appserver.js";
 import type { Session, SessionRegistry } from "./sessions.js";
@@ -38,6 +39,8 @@ export class Hub {
   private readonly clients = new Set<PhoneClient>();
   private readonly pendingRoutes = new Map<string, { intent: Intent; expires: number }>();
   private readonly renders = new Map<string, Promise<void>>();
+  /** Latest "right now" lines per session, cleared when a new turn starts. */
+  private readonly activity = new Map<string, ActivityItem[]>();
 
   constructor(private readonly d: HubDeps) {
     this.activeSessionId = d.registry.list().find((s) => !s.unlisted)?.id ?? null;
@@ -47,11 +50,21 @@ export class Hub {
   bridgeEvents() {
     return {
       status: (sid: string, status: "idle" | "working" | "waitingApproval" | "error") => {
-        if (this.d.registry.setStatus(sid, status)) this.broadcast({ type: "session.status", sessionId: sid, status });
+        const prev = this.d.registry.getStatus(sid);
+        if (!this.d.registry.setStatus(sid, status)) return;
+        if (status === "working" && (prev === "idle" || prev === "error") && this.activity.delete(sid)) {
+          this.broadcast({ type: "activity", sessionId: sid, items: [] });
+        }
+        this.broadcast({ type: "session.status", sessionId: sid, status, since: this.d.registry.since(sid) ?? Date.now() });
       },
       outcome: (sid: string, o: TurnOutcome) => this.onOutcome(sid, o),
       approvalRequest: (a: PendingApproval) => this.broadcast(this.approvalMsg(a)),
       approvalResolved: (requestId: string) => this.broadcast({ type: "approval.resolved", requestId }),
+      activity: (sid: string, item: ActivityItem) => {
+        const items = upsertActivity(this.activity.get(sid) ?? [], item);
+        this.activity.set(sid, items);
+        this.broadcast({ type: "activity", sessionId: sid, items });
+      },
       goal: (sid: string, goal: V2.ThreadGoal | null) => this.broadcast({ type: "goal", sessionId: sid, goal: toGoal(goal) }),
       delta: () => {},
       toast: (level: "info" | "warn" | "error", message: string) => this.broadcast({ type: "toast", level, message }),
@@ -72,6 +85,7 @@ export class Hub {
     c.send(this.sessionsMsg());
     for (const a of this.d.answers.recent(20)) c.send({ type: "answer", ...a });
     for (const a of this.bridge.pendingApprovals()) c.send(this.approvalMsg(a));
+    for (const [sessionId, items] of this.activity) c.send({ type: "activity", sessionId, items });
     if (this.activeSessionId) await this.sendSessionDetails(c, this.activeSessionId);
   }
 
@@ -299,6 +313,7 @@ export class Hub {
       sessionId: a.sessionId,
       kind: a.kind,
       summary: a.summary,
+      ...(a.reason ? { reason: a.reason } : {}),
       ...(a.command ? { command: a.command } : {}),
       ...(a.cwd ? { cwd: a.cwd } : {}),
     };
