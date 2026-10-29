@@ -1,7 +1,8 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import type { SessionInfo, SessionStatus } from "@sulti/core";
-import { readJson } from "./store.js";
+import { readJsonText } from "./store.js";
 import { folderName, isSameOrInside, normalizeWinPath } from "./paths.js";
 
 /** Values confirmed against the installed Codex in T1 (docs/PROTOCOL_NOTES.md). */
@@ -45,7 +46,16 @@ export function parseSessions(raw: unknown): Session[] {
 }
 
 export function loadSessions(dataDir: string): Session[] {
-  return parseSessions(readJson<unknown>(join(dataDir, "sessions.json"), { sessions: [] }));
+  const file = join(dataDir, "sessions.json");
+  if (!existsSync(file)) return parseSessions({ sessions: [] });
+  let raw: unknown;
+  try {
+    raw = readJsonText(file);
+  } catch (err) {
+    // A typo in the owner's file should be loud, not "no sessions".
+    throw new Error(`sessions.json is not valid JSON: ${(err as Error).message}`);
+  }
+  return parseSessions(raw);
 }
 
 /** Session registry: configured sessions plus "unlisted" ones discovered from Stop hooks. */

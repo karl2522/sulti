@@ -10,10 +10,19 @@ export function writeJson(file: string, value: unknown): void {
   renameSync(tmp, file);
 }
 
+/**
+ * Read a JSON file the owner may have edited by hand. Strips a UTF-8 byte-order
+ * mark, which Windows PowerShell 5.1 (Set-Content -Encoding UTF8) and some
+ * editors write and JSON.parse rejects.
+ */
+export function readJsonText(file: string): unknown {
+  return JSON.parse(readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
+}
+
 export function readJson<T>(file: string, fallback: T): T {
   if (!existsSync(file)) return fallback;
   try {
-    return JSON.parse(readFileSync(file, "utf8")) as T;
+    return readJsonText(file) as T;
   } catch {
     return fallback;
   }

@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { APP_SLUG, DEFAULT_HOOK_PORT, DEFAULT_PHONE_PORT, SHARED_APP_SERVER_PORT } from "@sulti/core";
+import { readJsonText } from "./store.js";
 
 export const ConfigFile = z.object({
   /** Public HTTPS origin the phone uses, e.g. the Tailscale Serve URL. */
@@ -52,7 +53,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
   const file = join(dataDir, "config.json");
   let parsed: ConfigFile = {};
   if (existsSync(file)) {
-    const raw = JSON.parse(readFileSync(file, "utf8")) as unknown;
+    const raw = readJsonText(file);
     const res = ConfigFile.safeParse(raw);
     if (!res.success) throw new Error(`Invalid config.json: ${res.error.issues.map((i) => i.path.join(".") + " " + i.message).join("; ")}`);
     parsed = res.data;

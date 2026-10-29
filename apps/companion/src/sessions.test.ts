@@ -1,6 +1,26 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { loadConfig } from "./config.js";
 import { isSameOrInside, normalizeWinPath } from "./paths.js";
-import { SessionRegistry, parseSessions } from "./sessions.js";
+import { SessionRegistry, loadSessions, parseSessions } from "./sessions.js";
+
+describe("hand-edited data files", () => {
+  it("accepts a UTF-8 byte-order mark (Windows PowerShell 5.1 writes one)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sulti-bom-"));
+    writeFileSync(join(dir, "sessions.json"), "\uFEFF" + JSON.stringify({ sessions: [{ name: "Kernel Labs", cwd: "D:\\work\\kernel-labs" }] }));
+    writeFileSync(join(dir, "config.json"), "\uFEFF" + JSON.stringify({ port: 7517 }));
+    expect(loadSessions(dir).map((s) => s.name)).toEqual(["Kernel Labs"]);
+    expect(loadConfig({}, { dataDir: dir }).port).toBe(7517);
+  });
+
+  it("reports a broken sessions.json instead of silently loading none", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sulti-badjson-"));
+    writeFileSync(join(dir, "sessions.json"), "{ sessions: [ }");
+    expect(() => loadSessions(dir)).toThrow(/sessions.json is not valid JSON/);
+  });
+});
 
 describe("Windows path normalization", () => {
   it("is case-insensitive and slash-agnostic", () => {
