@@ -103,3 +103,33 @@ One short entry per non-obvious choice: decision, reason, alternative considered
 - **Decision:** `two-clients.ts` supports the full three-turn plan (`--turns 3`), but the recorded run used `--turns 1`. A starts the thread and its only turn, B resumes while that turn is running, and B must receive the rest of it live.
 - **Reason:** the build prompt caps live Codex use at 8 turns in total. One `smoke:live` attempt was interrupted by the environment, and whether it reached Codex can't be proven, so it is counted as 2 turns. That left one turn for T5. A free dry run (`--turns 0`) showed that a thread can't be resumed before its first turn, so the second client has to join mid-turn.
 - **Alternative:** the full three-turn run, which the owner can do with `node tools/shared-session/two-clients.ts --turns 3`.
+
+## D17. The phone UI has no UI, router or animation libraries
+
+- **Decision:** the redesign uses React plus one stylesheet. Routing is about 60 lines over the History API (`apps/phone/src/router.ts`), with each history entry storing its depth so pages slide the right way. Motion is CSS: `transform` and `opacity` only, strong ease-out curves, under 300 ms except sheets, and a gentler version under `prefers-reduced-motion`. The bottom sheet tracks drags 1:1 and dismisses on distance or flick speed (`ui/Sheet.tsx`).
+- **Reason:** the app has five screens and a handful of sheets. A router and a motion library would roughly double the JavaScript for things the platform already does. The companion serves `index.html` for every path, so deep links survive a reload.
+- **Alternative:** React Router and Motion. They're worth adding if gestures grow beyond the sheet.
+
+## D18. The reader plays sentences, not one long string
+
+- **Decision:** `reading.ts` splits an answer into sentences and code blocks, runs each through the core speech normalizer, and keeps a map from every speech chunk back to its sentence. The phone voice reports exactly which sentence it's on. PC audio is a single WAV, so its sentence is estimated from the share of speech characters already played.
+- **Reason:** highlighting the spoken sentence, jumping to a tapped one, and previous/next sentence all need that map. Reusing `toSpeechText` keeps what the phone says identical to what the PC renders.
+- **Alternative:** word-level timing from the speech engine (`boundary` events), which iOS reports unreliably.
+
+## D19. Talk previews the route on the phone
+
+- **Decision:** as you type, the talk screen runs the same `route()` from `packages/core` that the companion runs, and shows the target session (including "heard as" for aliases), the action and the cleaned-up text. Send still goes through the companion, which routes again and remains the authority.
+- **Reason:** you see what will happen before it happens, with no round trip per keystroke. The router is pure and already browser-safe.
+- **Alternative:** a "dry run" message to the companion, which costs a round trip and adds a message type.
+
+## D20. "Right now" comes from command and file-change items
+
+- **Decision:** the companion turns `commandExecution` items (using Codex's parsed read/search/list actions) and `fileChange` items into one-line activity entries, keeps the latest six per session, clears them when a new turn starts, and pushes them as an `activity` message. Status changes now carry `since`, approvals carry Codex's `reason`, and `auth.ok` carries the PC's name. All of these are optional fields, so older phones still parse every message.
+- **Reason:** the design's session page shows what Codex is doing; these items are the only ones that say so without exposing message text.
+- **Alternative:** streaming agent message deltas, which is noisy to listen to and leaks partial answers.
+
+## D21. "Answer ready" is tracked on the phone
+
+- **Decision:** each phone remembers which answers it has opened or played (`sulti.heard` in localStorage, last 300). On a phone's first connection, the backlog the companion replays is marked as heard.
+- **Reason:** "heard" belongs to the listener, not the PC, and two phones can disagree. Marking the backlog avoids greeting a newly paired phone with 20 "ready" answers.
+- **Alternative:** read state on the companion, shared by all devices.

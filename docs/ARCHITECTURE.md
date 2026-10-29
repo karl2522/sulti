@@ -59,7 +59,7 @@ The companion runs prompts and Codex actions, and it switches sessions itself wh
 | `packages/core` | Pure TypeScript shared by both sides: the wire contract (zod schemas for every phone and companion message), the intent router, fuzzy matcher, prompt cleanup, and the markdown-to-speech normalizer and chunker. Browser-safe. |
 | `packages/protocol` | Types generated from the installed Codex (`codex app-server generate-ts`), plus a JSON-RPC client over stdio or WebSocket with a 13-method allowlist. |
 | `apps/companion` | The CLI (`npm start`, `npm run pair`, `npm run devices`), the phone server (static app, `/api/pair`, signed audio, `/ws`), the local control server (Stop hook, pairing codes), the app-server manager, the session registry, the answer store, TTS and clipboard helpers. |
-| `apps/phone` | Vite + React app: pairing, sessions and the thread picker, composer, skills drawer, goal panel, Stop, approval cards, answers with both playback modes and both copy buttons, settings. No service worker. |
+| `apps/phone` | Vite + React app built from the Sulti design. Screens: connect, sessions (with "Needs you"), session details (goal, live "Right now" activity, skills, Stop), the reader (highlights the sentence being spoken, tap any sentence to jump), and talk (a live "Sulti will send" preview from the same router). Sheets for approvals, settings, sessions, skills, threads and copy. Self-hosted Atkinson Hyperlegible fonts, no UI or router libraries, no service worker. |
 | `scripts/hooks` | The Stop hook and its installer. The installer is never run by the build; the owner runs it after review. |
 | `tools` | Secret scan, the shared-session lab (T5) and the speech-to-text bench (T6). |
 | `test` | A mock app-server (JSONL over stdio, scripted scenarios), fixtures shaped like a real capture, and integration tests that run the real companion against the mock. |
@@ -93,4 +93,3 @@ The data folder is `%APPDATA%\sulti`, or `SULTI_DATA_DIR`. Nothing in it is ever
 ## Shared mode
 
 By default the companion owns its Codex sessions, through one `codex app-server` child over stdio. Shared mode (`"mode": "shared"` in `config.json`) connects instead to a WebSocket app-server that terminals can also join with `codex --remote`. A turn started from the phone then shows up live in the terminal, and the reverse also works. T5 verified the core of this. The WebSocket transport is still experimental in Codex, and in shared mode the companion leaves approvals for threads it doesn't own to the client that does. See `docs/REPORT.md` for the result and recommendation.
-
