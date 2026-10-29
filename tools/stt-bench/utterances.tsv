@@ -1,0 +1,26 @@
+# file	expected	utterance (as dictated; record yourself saying this)
+# expected: app:switchSession:<id> | app:switchSession:? | app:playback:<action> | app:copy:<target> | app:showApprovals
+#           prompt:<sessionId> | codex:skill:<name> | codex:goal.set | codex:goal.get | codex:goal.update:<status> | codex:goal.clear | codex:interrupt | none
+# A trailing ! means needsConfirm must be true. The active session is sole-harbor.
+01-switch-soul-harbor.wav	app:switchSession:sole-harbor	switch to soul harbor
+02-tell-led-tracker.wav	prompt:lead-tracker	tell led tracker to investigate the checkout problem don't modify anything yet
+03-use-execute-planes.wav	codex:skill:execute-plans	use execute planes
+04-use-systematic-debugging.wav	codex:skill:systematic-debugging	use systematic de bugging to investigate the authentication issue
+05-set-goal.wav	codex:goal.set	set the goal to finish the authentication migration and make all tests pass
+06-current-goal.wav	codex:goal.get	what's the current goal
+07-pause-goal.wav	codex:goal.update:paused	pause the goal
+08-resume-goal.wav	codex:goal.update:active	resume the goal
+09-clear-goal.wav	codex:goal.clear	clear the goal
+10-stop-codex.wav	codex:interrupt	stop codex
+11-read-response.wav	app:playback:read	read the response
+12-read-again.wav	app:playback:again	read it again
+13-pause.wav	app:playback:pause	pause
+14-resume.wav	app:playback:resume	resume
+15-start-over.wav	app:playback:restart	start over
+16-copy-response.wav	app:copy:ask	copy the response
+17-run-tests.wav	prompt:sole-harbor	run the tests
+18-colonel-labs-tests.wav	prompt:kernel-labs	in colonel labs run the tests
+19-approve.wav	app:showApprovals	approve
+20-yes-do-it.wav	app:showApprovals	yes do it
+21-switch-bananas.wav	app:switchSession:?!	switch to bananas
+
