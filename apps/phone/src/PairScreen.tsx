@@ -33,7 +33,7 @@ export function PairScreen({ onPaired }: { onPaired: (d: Device) => void }) {
 
   return (
     <main className="center-screen">
-      <img src="/icon.svg" alt="" width={72} height={72} />
+      <img src="/favicon.svg" alt="" width={72} height={72} />
       <h1>Pair this phone</h1>
       <p className="muted">Pairing lets this phone talk to the Sulti companion on your PC. Codes work once and expire after 10 minutes.</p>
       <form className="stack" onSubmit={submit}>
@@ -57,7 +57,7 @@ export function PairScreen({ onPaired }: { onPaired: (d: Device) => void }) {
 export function Unpaired() {
   return (
     <main className="center-screen">
-      <img src="/icon.svg" alt="" width={72} height={72} />
+      <img src="/favicon.svg" alt="" width={72} height={72} />
       <h1>Not paired yet</h1>
       <p className="muted">
         Start the Sulti companion on your PC and open the pairing link it prints on this phone. Press Enter in the companion window for a new link, or run <code>npm run pair</code>.
