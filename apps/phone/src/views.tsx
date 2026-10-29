@@ -214,15 +214,25 @@ function AnswerCard(props: { answer: Answer; name: string; player: Player; send:
 }
 
 function SkillsSheet({ skills, onPick, onClose }: { skills: SkillInfo[]; onPick: (s: SkillInfo) => void; onClose: () => void }) {
+  const [filter, setFilter] = useState("");
+  const q = filter.trim().toLowerCase();
+  // Name matches first, then skills that only mention the word in their description.
+  const shown = q
+    ? [...skills.filter((s) => s.name.toLowerCase().includes(q)), ...skills.filter((s) => !s.name.toLowerCase().includes(q) && s.description.toLowerCase().includes(q))]
+    : skills;
   return (
     <Sheet title="Skills" onClose={onClose}>
       {skills.length === 0 && <p className="muted">No skills found for this project.</p>}
+      {skills.length > 6 && (
+        <input type="search" value={filter} placeholder={`Filter ${skills.length} skills…`} aria-label="Filter skills" onChange={(e) => setFilter(e.target.value)} />
+      )}
+      {skills.length > 0 && shown.length === 0 && <p className="muted">No skill matches "{filter}".</p>}
       <ul className="list">
-        {skills.map((s) => (
+        {shown.map((s) => (
           <li key={s.path || s.name}>
             <button className="list-item" onClick={() => onPick(s)}>
               <strong>${s.name}</strong>
-              {s.description && <span className="muted small">{s.description}</span>}
+              {s.description && <span className="muted small clamp">{s.description}</span>}
             </button>
           </li>
         ))}
