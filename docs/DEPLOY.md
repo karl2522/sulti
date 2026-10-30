@@ -58,6 +58,8 @@ Defaults are fine except for these, which break Sulti if they're on:
 - **WebSockets:** on (the default).
 - **Always Use HTTPS:** on.
 
+Custom hostnames inherit the settings of the Cloudflare domain that hosts them (`bizello.app` here), including features that inject scripts into pages. A **configuration rule** on `bizello.app` matching `http.host eq "trysulti.jaredomen.com"` turns off Web Analytics (RUM), Zaraz and Rocket Loader for Sulti only. Without it, Cloudflare's analytics beacon is injected and Sulti's Content-Security-Policy blocks it, which logs an error on every page.
+
 ## 4. Point the companion at the new address
 
 Create or edit `%APPDATA%\sulti\config.json` (see `apps/companion/config.example.json`):
