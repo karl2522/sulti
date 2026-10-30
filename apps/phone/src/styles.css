@@ -495,16 +495,50 @@ code,
   color: var(--faint);
 }
 .play-ring {
+  position: relative;
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 44px;
   height: 44px;
-  margin-right: 14px;
   border-radius: 999px;
   border: 1.5px solid var(--accent-line);
   color: var(--accent);
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 200ms ease,
+    border-color 200ms ease;
+}
+.play-ring.is-active {
+  border-color: transparent;
+  background: var(--accent-soft);
+}
+.play-ring .ring {
+  position: absolute;
+  inset: -2px;
+  width: calc(100% + 4px);
+  height: calc(100% + 4px);
+}
+.answer-ctl {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 14px;
+}
+/* Appears beside the play button only while that answer is in the player. */
+.stop-btn {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--muted);
+  animation: pop 220ms var(--ease-out) both;
 }
 .skill-row {
   gap: 12px;
@@ -1743,6 +1777,7 @@ textarea.field {
   .stagger,
   .empty,
   .mini,
+  .stop-btn,
   .act,
   .route-card,
   .dock {

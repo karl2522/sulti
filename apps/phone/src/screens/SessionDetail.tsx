@@ -4,6 +4,7 @@ import { useApp } from "../appContext.js";
 import { activityVerb, ago, firstLine, span } from "../present.js";
 import { navigate } from "../router.js";
 import { latestAnswer } from "../state.js";
+import { AnswerControls } from "../ui/AnswerControls.js";
 import { Icon, Spinner, type IconName } from "../ui/icons.js";
 import { Dock, nth, PageHeader, useNow } from "../ui/parts.js";
 
@@ -11,7 +12,7 @@ const ACTIVITY_ICON: Record<ActivityItem["kind"], IconName> = { read: "file", se
 const SKILLS_SHOWN = 5;
 
 export function SessionDetail({ id }: { id: string }) {
-  const { state, send, openSheet, listen } = useApp();
+  const { state, send, openSheet } = useApp();
   const s = state.sessions.find((x) => x.id === id);
   const now = useNow(1000, s?.status === "working");
 
@@ -90,9 +91,7 @@ export function SessionDetail({ id }: { id: string }) {
                   {answer.source === "hook" ? ", from a terminal" : ""}
                 </span>
               </button>
-              <button type="button" className="play-ring press" aria-label="Listen to this answer" onClick={() => listen(answer)}>
-                <Icon name="play" size={18} />
-              </button>
+              <AnswerControls answer={answer} label="this answer" />
             </div>
           </section>
         )}

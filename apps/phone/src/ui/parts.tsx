@@ -44,9 +44,9 @@ export function Avatar({ session, tone, size = "md" }: { session: SessionInfo; t
   );
 }
 
-export function StatusIcon({ icon }: { icon: SessionView["icon"] }) {
+export function StatusIcon({ icon, live = true }: { icon: SessionView["icon"]; live?: boolean }) {
   if (icon === "spinner") return <Spinner />;
-  if (icon === "bars") return <Bars />;
+  if (icon === "bars") return <Bars live={live} />;
   if (icon === "none") return null;
   return <Icon name={icon} size={16} stroke={2.2} />;
 }
@@ -54,7 +54,7 @@ export function StatusIcon({ icon }: { icon: SessionView["icon"] }) {
 export function StatusLine({ view }: { view: SessionView }) {
   return (
     <span className={"status tone-" + view.tone}>
-      <StatusIcon icon={view.icon} />
+      <StatusIcon icon={view.icon} live={view.label !== "Paused"} />
       <span>{view.label}</span>
     </span>
   );

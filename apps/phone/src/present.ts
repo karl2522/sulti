@@ -75,7 +75,13 @@ export function activityVerb(a: ActivityItem): string {
 }
 
 /** How one session should read in the list, most urgent state first. */
-export function viewSession(state: AppState, s: SessionInfo, heard: ReadonlySet<string>, playingSessionId: string | null, now = Date.now()): SessionView {
+export interface Playing {
+  sessionId: string;
+  answerId: string;
+  paused: boolean;
+}
+
+export function viewSession(state: AppState, s: SessionInfo, heard: ReadonlySet<string>, playing: Playing | null, now = Date.now()): SessionView {
   const base = { session: s, detailMono: false, needsYou: false };
   const approval = state.approvals.find((a) => a.sessionId === s.id);
   const answer = state.answers.find((a) => a.sessionId === s.id);
@@ -83,8 +89,9 @@ export function viewSession(state: AppState, s: SessionInfo, heard: ReadonlySet<
   if (approval) {
     return { ...base, tone: "coral", icon: "shield", label: "Needs approval", detail: approval.command ?? approval.summary, detailMono: !!approval.command, needsYou: true, approval };
   }
-  if (playingSessionId === s.id && answer) {
-    return { ...base, tone: "lagoon", icon: "bars", label: "Reading aloud", detail: firstLine(answer.text), answer };
+  if (playing?.sessionId === s.id) {
+    const a = state.answers.find((x) => x.id === playing.answerId) ?? answer;
+    if (a) return { ...base, tone: "lagoon", icon: "bars", label: playing.paused ? "Paused" : "Reading aloud", detail: firstLine(a.text), answer: a };
   }
   if (s.status === "working") {
     const last = state.activity[s.id]?.at(-1);

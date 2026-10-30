@@ -29,6 +29,13 @@ describe("session presentation", () => {
     expect(viewSession(state(act), working, new Set(), null, now).detail).toBe("Running npm test");
   });
 
+  it("shows the answer being read, and when it's paused", () => {
+    const older = { ...answer, id: "a0", text: "Older answer." };
+    const st = state({ answers: [answer, older] });
+    expect(viewSession(st, S(), new Set(), { sessionId: "kernel-labs", answerId: "a0", paused: false })).toMatchObject({ label: "Reading aloud", detail: "Older answer.", answer: { id: "a0" } });
+    expect(viewSession(st, S(), new Set(), { sessionId: "kernel-labs", answerId: "a0", paused: true }).label).toBe("Paused");
+  });
+
   it("formats names and times", () => {
     expect(initials("Kernel Labs")).toBe("KL");
     expect(initials("invoice-sync")).toBe("IS");

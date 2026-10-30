@@ -2,6 +2,7 @@ import { useApp } from "../appContext.js";
 import { clock, viewSession, type SessionView } from "../present.js";
 import { navigate } from "../router.js";
 import { elapsedOf } from "../usePlayer.js";
+import { AnswerControls, ProgressRing } from "../ui/AnswerControls.js";
 import { Icon, Logo, Mark } from "../ui/icons.js";
 import { Avatar, Dock, nth, SkeletonList, StatusLine, useNow } from "../ui/parts.js";
 import { PlayPause } from "./Listen.js";
@@ -9,7 +10,8 @@ import { PlayPause } from "./Listen.js";
 export function Sessions() {
   const { state, heard, player, openSheet } = useApp();
   const now = useNow(30_000);
-  const playing = player.now && player.now.status !== "done" ? player.now.sessionId : null;
+  const n = player.now;
+  const playing = n && n.status !== "done" ? { sessionId: n.sessionId, answerId: n.answerId, paused: n.status === "paused" } : null;
   const views = state.sessions.map((s) => viewSession(state, s, heard, playing, now));
   const needs = views.filter((v) => v.needsYou);
   const others = views.filter((v) => !v.needsYou);
@@ -74,9 +76,9 @@ function Group({ title, views, offset, activeId }: { title: string; views: Sessi
 }
 
 function SessionRow({ v, i, active }: { v: SessionView; i: number; active: boolean }) {
-  const { openSheet, listen } = useApp();
+  const { openSheet } = useApp();
   const { session, answer, approval } = v;
-  const ready = v.label === "Answer ready" || v.label === "Reading aloud";
+  const ready = v.icon === "speaker" || v.icon === "bars";
   const open = () => {
     if (approval) openSheet({ kind: "approval", requestId: approval.requestId });
     else if (ready && answer) navigate("/a/" + encodeURIComponent(answer.id));
@@ -94,39 +96,40 @@ function SessionRow({ v, i, active }: { v: SessionView; i: number; active: boole
           <StatusLine view={v} />
           <span className={"row-detail truncate" + (v.detailMono ? " mono" : "")}>{v.detail}</span>
         </span>
-        {approval ? <span className="chip chip-coral">Review</span> : !(v.label === "Answer ready") && <span className="chev"><Icon name="chevronRight" size={20} /></span>}
+        {approval ? (
+          <span className="chip chip-coral">Review</span>
+        ) : (
+          !(ready && answer) && (
+            <span className="chev">
+              <Icon name="chevronRight" size={20} />
+            </span>
+          )
+        )}
       </button>
-      {v.label === "Answer ready" && answer && (
-        <button type="button" className="play-ring press" aria-label={"Listen to the " + session.name + " answer"} onClick={() => listen(answer)}>
-          <Icon name="play" size={18} />
-        </button>
-      )}
+      {!approval && ready && answer && <AnswerControls answer={answer} label={"the " + session.name + " answer"} />}
     </li>
   );
 }
-
-const RING = 2 * Math.PI * 21;
 
 export function MiniPlayer() {
   const { player } = useApp();
   const n = player.now!;
   const tick = useNow(500, n.status === "playing");
   const t = elapsedOf(n, tick);
-  const frac = n.duration ? Math.min(1, t / n.duration) : 0;
   const label = n.status === "loading" ? "Preparing audio…" : n.status === "done" ? "Finished" : (n.status === "playing" ? "Reading, " : "Paused, ") + clock(t) + " of " + clock(n.duration);
   const open = () => navigate("/a/" + encodeURIComponent(n.answerId));
   return (
     <div className="mini">
       <button type="button" className="ring-btn press" aria-label={n.status === "playing" ? "Pause reading" : "Play"} onClick={player.toggle} disabled={n.status === "loading"}>
-        <svg className="ring" width="48" height="48" viewBox="0 0 48 48" aria-hidden="true">
-          <circle cx="24" cy="24" r="21" className="ring-track" />
-          <circle cx="24" cy="24" r="21" className="ring-fill" strokeDasharray={frac * RING + " " + RING} transform="rotate(-90 24 24)" />
-        </svg>
+        <ProgressRing now={n} />
         <PlayPause playing={n.status === "playing"} size={18} />
       </button>
       <button type="button" className="mini-text" onClick={open}>
         <strong className="truncate">{n.title}</strong>
         <span className="tabular">{label}</span>
+      </button>
+      <button type="button" className="icon-btn press" aria-label="Stop reading" onClick={player.stop}>
+        <Icon name="stop" size={20} stroke={2} />
       </button>
       <button type="button" className="icon-btn press" aria-label="Open player" onClick={open}>
         <Icon name="chevronUp" size={22} stroke={2.2} />
