@@ -5,7 +5,7 @@
  */
 import { bestMatch, ACCEPT_THRESHOLD, CONFIRM_THRESHOLD, type Candidate, type Match } from "./fuzzy.js";
 import { cleanupPrompt } from "./cleanup.js";
-import { tokenize } from "./normalize.js";
+import { normalizeSpoken, tokenize } from "./normalize.js";
 import type { Intent, PlaybackAction } from "./wire.js";
 import { MAX_GOAL_OBJECTIVE } from "./wire.js";
 
@@ -46,11 +46,15 @@ const COPY: [string, "ask" | "phone" | "pc"][] = [
 const SWITCH_VERBS = [["switch", "to"], ["go", "to"], ["change", "to"], ["jump", "to"], ["open"]];
 const SKILL_LEAD = [["use", "the", "skill"], ["use", "skill"], ["invoke", "the"], ["invoke"], ["use", "the"], ["use"], ["run", "the", "skill"], ["run", "skill"]];
 const TEXT_JOINERS = new Set(["to", "for", "on", "and", "then", "with"]);
+/** "tell <session> to": session names are short, so don't scan the whole prompt. */
+const MAX_NAME_WORDS = 5;
 
 const clamp = (n: number) => Math.max(0, Math.min(1, n));
 
 export function route(utterance: string, ctx: RouteContext): RouteOutput {
-  const { orig, norm } = tokenize(utterance);
+  const { norm } = tokenize(utterance);
+  // The utterance from word i on, with its original spacing and line breaks.
+  const after = (i: number) => utterance.trim().replace(new RegExp(`^(?:\\S+(?:\\s+|$)){${i}}`), "");
   const flat = norm.join(" ").replace(/\s+/g, " ").trim();
   if (!flat) return { intent: null, echo: "I didn't catch anything." };
   const sessionName = (id: string | null) => ctx.sessions.find((s) => s.id === id)?.name ?? "no session";
@@ -92,7 +96,7 @@ export function route(utterance: string, ctx: RouteContext): RouteOutput {
     start = prefix.rest;
   }
   const rest = norm.slice(start).join(" ").trim();
-  const restOrig = orig.slice(start).join(" ");
+  const restOrig = after(start);
 
   // 4. Switch session.
   for (const verbs of SWITCH_VERBS) {
@@ -130,7 +134,7 @@ export function route(utterance: string, ctx: RouteContext): RouteOutput {
   const goalSet = /^(?:set|change|update|make) (?:the |my |a )?goal (?:to |as |is )?/.exec(rest);
   if (goalSet) {
     const words = goalSet[0].trim().split(" ").length;
-    const objective = cleanupPrompt(orig.slice(start + words).join(" ")).slice(0, MAX_GOAL_OBJECTIVE);
+    const objective = cleanupPrompt(after(start + words)).slice(0, MAX_GOAL_OBJECTIVE);
     if (objective) return codex({ type: "goal.set", objective }, `Set goal: ${objective}`);
   }
 
@@ -140,7 +144,9 @@ export function route(utterance: string, ctx: RouteContext): RouteOutput {
     const from = start + lead.length;
     let best: { m: Match; end: number } | null = null;
     const candidates = ctx.skills.map((s) => ({ id: s.name, name: s.name }));
-    for (let end = from + 1; end <= norm.length; end++) {
+    // A skill name is a few words (plus "skill"); longer spans can't match and cost O(n²) each.
+    const span = Math.max(...candidates.map((c) => normalizeSpoken(c.name).split(" ").length)) + 1;
+    for (let end = from + 1; end <= Math.min(norm.length, from + span); end++) {
       let spoken = norm.slice(from, end).join(" ");
       spoken = spoken.replace(/ skill$/, "");
       const m = bestMatch(spoken, candidates);
@@ -150,7 +156,7 @@ export function route(utterance: string, ctx: RouteContext): RouteOutput {
       let end = best.end;
       if (norm[end] === "skill") end++;
       while (end < norm.length && TEXT_JOINERS.has(norm[end]!)) end++;
-      const text = cleanupPrompt(orig.slice(end).join(" "));
+      const text = cleanupPrompt(after(end));
       const sid = needTarget();
       if (!sid) return { intent: null, echo: "No active session. Pick a session first." };
       const needsConfirm = best.m.score < ACCEPT_THRESHOLD;
@@ -170,13 +176,13 @@ export function route(utterance: string, ctx: RouteContext): RouteOutput {
   // 7. Prompts addressed to a session: "tell/ask X to ...".
   if (norm[0] === "tell" || norm[0] === "ask") {
     let best: { m: Match; split: number } | null = null;
-    for (let i = 2; i < norm.length; i++) {
+    for (let i = 2; i < norm.length && i <= MAX_NAME_WORDS + 1; i++) {
       if (norm[i] !== "to" && norm[i] !== "that") continue;
       const m = bestMatch(norm.slice(1, i).join(" "), ctx.sessions);
       if (m && (!best || m.score > best.m.score)) best = { m, split: i };
     }
     if (best && best.m.score >= CONFIRM_THRESHOLD) {
-      const text = cleanupPrompt(orig.slice(best.split + 1).join(" "));
+      const text = cleanupPrompt(after(best.split + 1));
       if (text) {
         const needsConfirm = best.m.score < ACCEPT_THRESHOLD;
         return { intent: { kind: "prompt", sessionId: best.m.id, text, confidence: clamp(best.m.score), needsConfirm }, echo: `→ ${best.m.name}: ${text}` };

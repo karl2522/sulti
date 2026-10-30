@@ -16,6 +16,8 @@ function endPunctuate(sentence: string): string {
 }
 
 export function cleanupPrompt(raw: string): string {
+  // Line breaks mean typed or pasted text (a list, code, a stack trace): keep it exactly.
+  if (raw.includes("\n")) return raw.trim();
   let text = raw.replace(/\s+/g, " ").trim();
   if (!text) return text;
   // Split into sentences on existing punctuation, then on instruction breaks.

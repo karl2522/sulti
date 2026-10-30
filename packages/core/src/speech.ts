@@ -12,7 +12,8 @@ export const MAX_CHUNK = 250;
 
 const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>()\]]+/gi;
 // Paths with at least two separators, or a drive letter, or ./ ../ ~/ prefixes.
-const PATH_RE = /(?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|~[\\/]|[\\/])?(?:[\w.@-]+[\\/]){2,}[\w.@-]+|[A-Za-z]:[\\/](?:[\w.@-]+[\\/])*[\w.@-]+/g;
+// Segments are capped at 100 chars so a long unbroken token stays linear instead of O(n²).
+const PATH_RE = /(?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|~[\\/]|[\\/])?(?:[\w.@-]{1,100}[\\/]){2,}[\w.@-]{1,100}|[A-Za-z]:[\\/](?:[\w.@-]{1,100}[\\/])*[\w.@-]{1,100}/g;
 
 /** Keep the last two segments of a path: "src/checkout/cart.ts" -> "checkout/cart.ts". */
 export function shortenPath(path: string): string {

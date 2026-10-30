@@ -1,5 +1,5 @@
 import { route, type Intent, type SessionInfo } from "@sulti/core";
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useApp } from "../appContext.js";
 import { chatLine, initials } from "../present.js";
 import { back } from "../router.js";
@@ -53,7 +53,9 @@ export function Talk({ query }: { query: URLSearchParams }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target?.id, state.conn]);
 
-  const routed = useMemo(() => (target && text.trim() && !skill ? route(text, { sessions: listed, skills, activeSessionId: target.id }) : null), [target, text, skill, listed, skills]);
+  // The preview can trail typing by a frame; the keyboard never waits on the router.
+  const typed = useDeferredValue(text);
+  const routed = useMemo(() => (target && typed.trim() && !skill ? route(typed, { sessions: listed, skills, activeSessionId: target.id }) : null), [target, typed, skill, listed, skills]);
 
   if (!target) {
     return (

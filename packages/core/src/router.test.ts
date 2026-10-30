@@ -19,6 +19,20 @@ describe("intent router: Section 9 corpus", () => {
     expect(out.intent).toMatchObject({ kind: "app", action: { type: "switchSession", sessionId: "sole-harbor" }, needsConfirm: false });
   });
 
+  it("keeps a typed prompt's line breaks exactly, after any session prefix", () => {
+    const pasted = "fix this error:\nTypeError: x is undefined\n    at cart.ts:12";
+    expect(r(pasted).intent).toMatchObject({ kind: "prompt", text: pasted });
+    expect(r("in kernel labs " + pasted).intent).toMatchObject({ sessionId: "kernel-labs", text: pasted });
+  });
+
+  it("stays fast on a long prompt that starts like a skill command", () => {
+    const many = { ...ctx, skills: Array.from({ length: 150 }, (_, i) => ({ name: "skill-name-number-" + i })) };
+    const long = "use the existing helper to " + "refactor the cart totals so they are cached ".repeat(15);
+    const t = performance.now();
+    r(long, many);
+    expect(performance.now() - t).toBeLessThan(500); // was ~6 s before the span cap
+  });
+
   it('"/new" starts a fresh chat, keeping any first prompt as typed', () => {
     expect(r("/new").intent).toMatchObject({ kind: "codex", sessionId: "sole-harbor", action: { type: "thread.new" } });
     expect(r("/new fix the login bug").intent).toMatchObject({ kind: "codex", action: { type: "thread.new", text: "fix the login bug" } });

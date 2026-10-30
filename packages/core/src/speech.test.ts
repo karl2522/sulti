@@ -61,4 +61,10 @@ describe("chunker", () => {
     for (const c of chunks) expect(c.length).toBeLessThanOrEqual(MAX_CHUNK);
     expect(chunks.join(" ").replace(/\s+/g, " ")).toBe(long);
   });
+
+  it("stays linear on a long unbroken token (answers can be 1 MB)", () => {
+    const t = performance.now();
+    toSpeechText("token " + "x".repeat(200_000) + " end");
+    expect(performance.now() - t).toBeLessThan(500); // was minutes before the segment cap
+  });
 });

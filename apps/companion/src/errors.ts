@@ -9,7 +9,7 @@ export function speakableError(info: unknown, message?: string | null): string {
     case "rateLimitExceeded":
       return "Codex is rate limited right now. Try again in a minute.";
     case "contextWindowExceeded":
-      return "This conversation is too long for the model. Start a new thread.";
+      return "This chat is too long for the model. Start a new one with /new.";
     case "serverOverloaded":
       return "Codex servers are busy. Try again shortly.";
     case "unauthorized":
