@@ -36,6 +36,7 @@ All four must pass. `e2e:live` uses a throwaway data folder, so your own session
 | Custom hostname `trysulti.jaredomen.com` | Cloudflare for SaaS on `bizello.app` | Cloudflare issues its certificate |
 | `trysulti` CNAME | Vercel DNS (`jaredomen.com`) | `sulti-origin.bizello.app` |
 | `_cf-custom-hostname.trysulti` TXT | Vercel DNS | The ownership value Cloudflare shows for the custom hostname |
+| CAA `0 issue "ssl.com"` on `jaredomen.com` | Vercel DNS | Lets Cloudflare's certificate authority issue for `trysulti`. Vercel's default CAA records only allow Let's Encrypt, Google and Sectigo, and choosing the authority on a custom hostname is Enterprise-only. Adding it keeps the others allowed. |
 
 One-time setup in the Cloudflare dashboard: open `bizello.app`, **SSL/TLS**, **Custom Hostnames**, **Enable Cloudflare for SaaS**. The rest (tunnel, records, fallback origin, custom hostname) can be done through the API or dashboard.
 
@@ -113,4 +114,3 @@ Anyone can load the app shell and `/api/health`. Everything else needs a paired 
 - **Codex** is only ever sent prompts; Sulti can't run shell commands, and every approval needs a tap.
 
 Cloudflare terminates HTTPS, so your prompts and answers pass through Cloudflare's edge decrypted, as they would for any site behind Cloudflare. If you want traffic that only your own devices can see, Tailscale Serve (in the README) is the alternative. For a second lock in front of the whole site, you can add Cloudflare Access later; the Home Screen app then needs to sign in to Access as well.
-
