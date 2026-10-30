@@ -46,19 +46,22 @@ $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if (-not (Test-Path -LiteralPath (Join-Path $repo 'apps\companion\dist\cli.js'))) { throw 'Build first: npm run build' }
 $runner = Join-Path $PSScriptRoot 'run-companion.ps1'
 $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-$arguments = "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$runner`" -Node `"$node`""
+# conhost --headless gives the scripts a console with no window. A plain hidden PowerShell gets
+# handed to Windows Terminal on Windows 11 and shows up as a window; closing it stops Sulti.
+$conhost = Join-Path $env:SystemRoot 'System32\conhost.exe'
+$arguments = "--headless `"$ps`" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$runner`" -Node `"$node`""
 $user = "$env:USERDOMAIN\$env:USERNAME"
 $dataDir = if ($env:SULTI_DATA_DIR) { $env:SULTI_DATA_DIR } else { Join-Path $env:APPDATA 'sulti' }
 $tunnel = $null
 if (Test-Path -LiteralPath (Join-Path $dataDir 'tunnel-token')) {
   $cf = (Get-Command cloudflared.exe -ErrorAction Stop).Source
-  $tunnel = "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$(Join-Path $PSScriptRoot 'run-tunnel.ps1')`" -Cloudflared `"$cf`""
+  $tunnel = "--headless `"$ps`" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$(Join-Path $PSScriptRoot 'run-tunnel.ps1')`" -Cloudflared `"$cf`""
 }
 
 if ($DryRun) {
   Write-Host "Task:    $TaskName (at logon of $user)"
-  Write-Host "Runs:    $ps $arguments"
-  if ($tunnel) { Write-Host "Task:    $TunnelTask"; Write-Host "Runs:    $ps $tunnel" } else { Write-Host "No tunnel-token file, so no tunnel task." }
+  Write-Host "Runs:    $conhost $arguments"
+  if ($tunnel) { Write-Host "Task:    $TunnelTask"; Write-Host "Runs:    $conhost $tunnel" } else { Write-Host "No tunnel-token file, so no tunnel task." }
   exit 0
 }
 
@@ -68,7 +71,7 @@ $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -Ru
 $tasks = @{ $TaskName = $arguments }
 if ($tunnel) { $tasks[$TunnelTask] = $tunnel }
 foreach ($name in $tasks.Keys) {
-  $action = New-ScheduledTaskAction -Execute $ps -Argument $tasks[$name] -WorkingDirectory $repo
+  $action = New-ScheduledTaskAction -Execute $conhost -Argument $tasks[$name] -WorkingDirectory $repo
   Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
   Start-ScheduledTask -TaskName $name
   Write-Host "Installed and started '$name'."
