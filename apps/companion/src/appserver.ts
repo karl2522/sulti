@@ -128,7 +128,7 @@ export class AppServerConnection {
     }
     const child = spawnResolved(cmd, args);
     child.stderr.resume(); // drain; app-server logs can contain local details, so don't persist them
-    return new AppServerClient(stdioTransport(child), { timeoutMs: 60_000 });
+    return new AppServerClient(stdioTransport(child), { timeoutMs: 60_000, onProtocolError: (m) => this.opts.log?.(`app-server: ${m}`) });
   }
 
   private async connectShared(): Promise<AppServerClient> {
@@ -137,7 +137,7 @@ export class AppServerConnection {
     if (host !== "127.0.0.1" && host !== "localhost" && host !== "[::1]") throw new Error("Shared app-server must be on loopback");
     const token = this.opts.sharedTokenFile ? readFileSync(this.opts.sharedTokenFile, "utf8").trim() : undefined;
     const transport = await connectWebSocket(url, token ? { bearerToken: token } : {});
-    return new AppServerClient(transport, { timeoutMs: 60_000 });
+    return new AppServerClient(transport, { timeoutMs: 60_000, onProtocolError: (m) => this.opts.log?.(`app-server: ${m}`) });
   }
 }
 
@@ -185,6 +185,8 @@ export class CodexBridge {
   private readonly skillCache = new Map<string, V2.SkillMetadata[]>();
   /** Turns this bridge ran, newest last: turnId -> sessionId. */
   private readonly ownTurns = new Map<string, string>();
+  /** Per-session queue: chat changes run one at a time, in the order they were asked for. */
+  private readonly queues = new Map<string, Promise<unknown>>();
   private seq = 0;
 
   constructor(
@@ -247,12 +249,24 @@ export class CodexBridge {
     return !!tid && this.activeTurn.has(tid);
   }
 
-  async ensureThread(s: Session): Promise<string> {
+  private serial<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
+    const run = (this.queues.get(sessionId) ?? Promise.resolve()).then(fn, fn);
+    this.queues.set(sessionId, run.catch(() => {}));
+    return run;
+  }
+
+  // Serialized so a slow resume (say, for the session page's goal) can't land after a newer
+  // New chat or switch and silently move the session, orphaning the turn now running.
+  ensureThread(s: Session): Promise<string> {
+    return this.serial(s.id, () => this.ensureThreadNow(s));
+  }
+
+  private async ensureThreadNow(s: Session): Promise<string> {
     const known = this.threads.get(s.id);
     if (known && this.loaded.has(known)) return known;
     if (known) {
       try {
-        return await this.attachThread(s, known);
+        return await this.attachNow(s, known);
       } catch (err) {
         this.log(`thread/resume failed for ${s.id}, starting a new thread: ${(err as Error).message}`);
       }
@@ -268,7 +282,11 @@ export class CodexBridge {
    * desktop app, an open terminal) holds it, Codex refuses the resume with
    * "already has an active writer"; continue a copy of it instead.
    */
-  async attachThread(s: Session, threadId: string): Promise<string> {
+  attachThread(s: Session, threadId: string): Promise<string> {
+    return this.serial(s.id, () => this.attachNow(s, threadId));
+  }
+
+  private async attachNow(s: Session, threadId: string): Promise<string> {
     const client = await this.conn.ready();
     const params = { threadId, cwd: s.cwd, sandbox: s.sandbox, approvalPolicy: s.approvalPolicy, excludeTurns: true };
     let id = threadId;
@@ -299,11 +317,13 @@ export class CodexBridge {
   }
 
   /** Forget the session's thread so its next prompt starts a fresh one. */
-  newThread(s: Session): void {
-    if (this.isBusy(s.id)) throw new Error(`${s.name} is still working. Stop the turn first.`);
-    const old = this.threads.get(s.id);
-    if (old) this.threadToSession.delete(old);
-    this.threads.delete(s.id);
+  newThread(s: Session): Promise<void> {
+    return this.serial(s.id, async () => {
+      if (this.isBusy(s.id)) throw new Error(`${s.name} is still working. Stop the turn first.`);
+      const old = this.threads.get(s.id);
+      if (old) this.threadToSession.delete(old);
+      this.threads.delete(s.id);
+    });
   }
 
   async startTurn(s: Session, input: V2.UserInput[]): Promise<string> {
@@ -358,7 +378,9 @@ export class CodexBridge {
   }
 
   async getGoal(s: Session): Promise<V2.ThreadGoal | null> {
-    const threadId = await this.ensureThread(s);
+    // Reading never creates a chat: a session on "New chat" has no goal yet.
+    const threadId = await this.serial(s.id, async () => (this.threads.get(s.id) ? this.ensureThreadNow(s) : null));
+    if (!threadId) return null;
     const client = await this.conn.ready();
     return (await client.request("thread/goal/get", { threadId })).goal;
   }
@@ -415,6 +437,7 @@ export class CodexBridge {
     switch (method) {
       case "turn/started": {
         const turnId = (p.turn as { id?: string } | undefined)?.id;
+        if (sid) this.log(`${sid}: turn started`);
         if (threadId && turnId) this.activeTurn.set(threadId, turnId);
         if (sid && turnId) this.ownTurn(turnId, sid);
         if (sid) this.events.status(sid, "working");
@@ -465,6 +488,7 @@ export class CodexBridge {
         this.events.approvalResolved(a.requestId);
       }
       if (sid) {
+        this.log(`${sid}: turn ${outcome.kind}`);
         this.events.status(sid, outcome.kind === "failed" ? "error" : "idle");
         this.events.outcome(sid, outcome);
       }

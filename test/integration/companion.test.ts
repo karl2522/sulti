@@ -115,6 +115,23 @@ describe("companion against the mock app-server", () => {
     expect(t.mockLog().filter((e) => e.method === "thread/start")).toHaveLength(2);
   });
 
+  it("New chat sent while a chat switch is still in flight wins, and the next turn's status settles", async () => {
+    const { phone } = await setup();
+    phone.send({ type: "prompt.send", sessionId: "sole-harbor", text: "Run the tests." });
+    const first = (await phone.waitFor("answer")) as Of<"answer">;
+    const current = (m: CompanionMessage) => (m.type === "sessions" ? m.sessions.find((s) => s.id === "sole-harbor") : undefined);
+    const thread = current([...phone.received].reverse().find((m) => current(m)?.threadId)!)!.threadId!;
+    phone.send({ type: "thread.attach", sessionId: "sole-harbor", threadId: thread });
+    phone.send({ type: "thread.new", sessionId: "sole-harbor" });
+    await sleep(300);
+    const mark = phone.mark();
+    phone.send({ type: "sessions.list" });
+    expect(current(await phone.waitFor("sessions", 5000, mark))!.threadId).toBeNull();
+    phone.send({ type: "prompt.send", sessionId: "sole-harbor", text: "Check the docs." });
+    await phone.waitFor((m) => m.type === "answer" && m.id !== first.id);
+    await phone.waitFor((m) => m.type === "session.status" && m.sessionId === "sole-harbor" && m.status === "idle", 5000, mark);
+  });
+
   it("a chat another Codex window holds is continued as a copy", async () => {
     const { t, phone } = await setup();
     phone.send({ type: "prompt.send", sessionId: "sole-harbor", text: "[locked] Run the tests." });

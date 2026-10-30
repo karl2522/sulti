@@ -202,8 +202,8 @@ export class Hub {
     }
   }
 
-  private newChat(c: PhoneClient, s: Session, first?: string): Promise<void> | void {
-    this.bridge.newThread(s);
+  private async newChat(c: PhoneClient, s: Session, first?: string): Promise<void> {
+    await this.bridge.newThread(s);
     this.broadcast(this.sessionsMsg());
     this.broadcast({ type: "goal", sessionId: s.id, goal: null });
     if (first) return this.prompt(c, s.id, first);

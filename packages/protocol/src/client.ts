@@ -161,8 +161,8 @@ export class AppServerClient {
   }
 
   private dispatch(method: string, params: unknown): void {
-    for (const h of this.anyHandlers) safe(() => h(method, params));
-    for (const h of this.handlers.get(method) ?? []) safe(() => h(params));
+    for (const h of this.anyHandlers) this.safe(method, () => h(method, params));
+    for (const h of this.handlers.get(method) ?? []) this.safe(method, () => h(params));
   }
 
   private async handleServerRequest(id: RpcId, method: string, params: unknown): Promise<void> {
@@ -188,14 +188,15 @@ export class AppServerClient {
       p.reject(new RpcError(`connection closed: ${reason}`, -32000));
     }
     this.pending.clear();
-    for (const cb of this.closeCbs) safe(() => cb(reason));
+    for (const cb of this.closeCbs) this.safe("close", () => cb(reason));
   }
-}
 
-function safe(fn: () => void): void {
-  try {
-    fn();
-  } catch {
-    // A faulty handler must not break the read loop.
+  /** A faulty handler must not break the read loop, but it must not vanish silently either. */
+  private safe(what: string, fn: () => void): void {
+    try {
+      fn();
+    } catch (err) {
+      this.opts.onProtocolError?.(`handler for ${what} failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 }
