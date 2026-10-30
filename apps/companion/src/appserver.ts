@@ -297,6 +297,17 @@ export class CodexBridge {
   async startTurn(s: Session, input: V2.UserInput[]): Promise<string> {
     const threadId = await this.ensureThread(s);
     const client = await this.conn.ready();
+    const active = this.activeTurn.get(threadId);
+    if (active) {
+      // Codex is mid-turn: add this to the running turn, like typing in the terminal while it works.
+      try {
+        await client.request("turn/steer", { threadId, input, expectedTurnId: active });
+        return active;
+      } catch (err) {
+        // The turn ended in the meantime: start a new one.
+        if (!/no active turn|expected active turn/i.test((err as Error).message)) throw err;
+      }
+    }
     const res = await client.request("turn/start", { threadId, input });
     this.activeTurn.set(threadId, res.turn.id);
     this.events.status(s.id, "working");

@@ -189,6 +189,8 @@ export function startPhoneServer(d: PhoneServerDeps, port: number): Promise<Runn
     let alive = true;
     const ping = setInterval(() => {
       if (!alive) return ws.terminate();
+      // A revoked phone loses its open connection too, not only future ones.
+      if (client && !d.pairing.has(client.deviceId)) return ws.close(4401, "revoked");
       alive = false;
       ws.ping();
     }, 30_000);
@@ -209,6 +211,7 @@ export function startPhoneServer(d: PhoneServerDeps, port: number): Promise<Runn
         void d.hub.welcome(client);
         return;
       }
+      if (!d.pairing.has(client.deviceId)) return ws.close(4401, "revoked");
       if (!msg) return send({ type: "toast", level: "warn", message: "Ignored an invalid message." });
       void d.hub.handle(client, msg);
     });

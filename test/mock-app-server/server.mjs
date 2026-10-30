@@ -174,6 +174,11 @@ async function handleRequest(id, method, params = {}) {
       void runTurn(t, turnId, scenarioFor(input), vars);
       return;
     }
+    case "turn/steer": {
+      const st = turns.get(params.expectedTurnId);
+      if (!st || st.threadId !== params.threadId) return fail(-32600, "no active turn to steer");
+      return ok({ turnId: params.expectedTurnId });
+    }
     case "turn/interrupt": {
       const st = turns.get(params.turnId);
       if (!st || st.threadId !== params.threadId) return fail(-32600, "no active turn to interrupt");

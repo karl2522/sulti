@@ -35,6 +35,8 @@ async function start(): Promise<void> {
   }
   const sessions = loadSessions(config.dataDir);
   const log = (m: string) => console.log(`[${new Date().toLocaleTimeString()}] ${m}`);
+  // One unexpected rejection shouldn't take the phone offline; log it and keep serving.
+  process.on("unhandledRejection", (err) => log(`unexpected error: ${err instanceof Error ? err.message : String(err)}`));
   const c = await startCompanion(config, { log });
   console.log(`${APP_NAME} ${APP_VERSION} running.`);
   console.log(`  Phone server:   http://127.0.0.1:${c.phone.port}  (proxy this one with Tailscale Serve)`);
@@ -81,7 +83,7 @@ async function main(): Promise<void> {
       return;
     }
     if (sub === "revoke" && arg) {
-      console.log(pairing.revoke(arg) ? `Revoked ${arg}. Restart the companion to drop open connections.` : `No device ${arg}.`);
+      console.log(pairing.revoke(arg) ? `Revoked ${arg}. Its open connection closes within 30 seconds.` : `No device ${arg}.`);
       return;
     }
   }

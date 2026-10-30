@@ -18,6 +18,7 @@ export interface RequestMap {
   "thread/list": [V2.ThreadListParams, V2.ThreadListResponse];
   "thread/read": [V2.ThreadReadParams, V2.ThreadReadResponse];
   "turn/start": [V2.TurnStartParams, V2.TurnStartResponse];
+  "turn/steer": [V2.TurnSteerParams, V2.TurnSteerResponse];
   "turn/interrupt": [V2.TurnInterruptParams, V2.TurnInterruptResponse];
   "skills/list": [V2.SkillsListParams, V2.SkillsListResponse];
   "thread/goal/set": [V2.ThreadGoalSetParams, V2.ThreadGoalSetResponse];
@@ -38,6 +39,7 @@ export const ALLOWED_METHODS: ReadonlySet<string> = new Set<RequestMethod>([
   "thread/list",
   "thread/read",
   "turn/start",
+  "turn/steer",
   "turn/interrupt",
   "skills/list",
   "thread/goal/set",

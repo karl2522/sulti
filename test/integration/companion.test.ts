@@ -141,6 +141,20 @@ describe("companion against the mock app-server", () => {
     expect(t.mockLog().some((e) => e.method === "turn/interrupt")).toBe(true);
   });
 
+  it("a prompt sent while Codex works joins the running turn", async () => {
+    const { t, phone } = await setup();
+    phone.send({ type: "prompt.send", sessionId: "sole-harbor", text: "[scenario:interrupted] Investigate the auth module." });
+    await phone.waitFor((m) => m.type === "session.status" && m.status === "working");
+    phone.send({ type: "prompt.send", sessionId: "sole-harbor", text: "Also check the logout path." });
+    for (let i = 0; i < 100 && !t.mockLog().some((e) => e.method === "turn/steer"); i++) await sleep(30);
+    const steer = t.mockLog().find((e) => e.method === "turn/steer") as { params: { expectedTurnId: string; input: { text?: string }[] } };
+    expect(steer.params.expectedTurnId).toMatch(/^turn-/);
+    expect(steer.params.input[0]!.text).toBe("Also check the logout path.");
+    expect(turnStarts(t)).toHaveLength(1);
+    phone.send({ type: "turn.interrupt", sessionId: "sole-harbor" });
+    await phone.waitFor((m) => m.type === "session.status" && m.status === "idle");
+  });
+
   it("goal set / get / pause / resume / clear", async () => {
     const { t, phone } = await setup();
     phone.send({ type: "utterance", text: "set the goal to finish the authentication migration and make all tests pass" });
@@ -385,5 +399,16 @@ describe("pairing and WebSocket auth over the wire", () => {
     const second = await Phone.open(t.c.phone.port);
     second.send({ type: "auth", deviceToken: token });
     expect(await waitClose(second.ws)).toBe(4401);
+  });
+
+  it("revoking a device also closes its open connection", async () => {
+    const t = await startTestCompanion();
+    running.push(t);
+    const phone = await Phone.connect(t);
+    phones.push(phone);
+    const auth = phone.received.find((m) => m.type === "auth.ok") as Of<"auth.ok">;
+    expect(t.c.pairing.revoke(auth.deviceId)).toBe(true);
+    phone.send({ type: "sessions.list" });
+    expect(await waitClose(phone.ws)).toBe(4401);
   });
 });

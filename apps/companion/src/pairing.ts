@@ -96,6 +96,12 @@ export class Pairing {
     return this.devices.map((d) => ({ ...d }));
   }
 
+  /** Still paired? (Revoke runs in another process, so re-read the file.) */
+  has(id: string): boolean {
+    this.reload();
+    return this.devices.some((d) => d.id === id);
+  }
+
   revoke(id: string): boolean {
     this.reload();
     const before = this.devices.length;

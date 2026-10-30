@@ -96,6 +96,7 @@ export function Talk({ query }: { query: URLSearchParams }) {
   const chatSession = state.sessions.find((x) => x.id === chatId) ?? target;
   const newChat = routed?.intent?.kind === "codex" && routed.intent.action.type === "thread.new";
   const chat = newChat ? "New chat" : chatLine(chatSession, state.threads[chatSession.id])[0];
+  if (!note && chatSession.status === "working" && (skill || routed?.intent?.kind === "prompt")) note = "Codex is working, so this joins the current turn.";
 
   return (
     <>
