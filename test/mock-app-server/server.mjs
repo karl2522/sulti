@@ -138,7 +138,17 @@ async function handleRequest(id, method, params = {}) {
     case "thread/resume": {
       const t = threads.get(params.threadId);
       if (!t) return fail(-32600, `no rollout found for thread id ${params.threadId}`);
+      // Stands in for a thread another Codex process has open.
+      if (t.preview.includes("[locked]")) return fail(-32600, `thread ${t.id} already has an active writer`);
       return ok({ thread: threadView(t), model: "mock-model", modelProvider: "mock", serviceTier: null, disabledPluginIds: [], cwd: t.cwd, instructionSources: [], approvalPolicy: "on-request", approvalsReviewer: "user", sandbox: { type: "readOnly" }, reasoningEffort: null, collaborationMode: null, turnsBackwardsCursor: null, itemsBackwardsCursor: null });
+    }
+    case "thread/fork": {
+      const src = threads.get(params.threadId);
+      if (!src) return fail(-32600, `no rollout found for thread id ${params.threadId}`);
+      const t = makeThread({ id: `thread-${++seq}`, cwd: params.cwd ?? src.cwd, ephemeral: params.ephemeral });
+      t.preview = src.preview.replace("[locked]", "").trim();
+      threads.set(t.id, t);
+      return ok({ thread: threadView(t), model: "mock-model", modelProvider: "mock", serviceTier: null, disabledPluginIds: [], cwd: t.cwd, instructionSources: [], approvalPolicy: "on-request", approvalsReviewer: "user", sandbox: { type: "readOnly" }, reasoningEffort: null });
     }
     case "thread/list": {
       const cwds = params.cwd == null ? null : [].concat(params.cwd);

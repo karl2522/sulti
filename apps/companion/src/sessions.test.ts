@@ -65,4 +65,15 @@ describe("session registry", () => {
     expect(reg.forHookCwd("e:/scratch/demo-app/").id).toBe(a.id);
     expect(reg.list()).toHaveLength(3);
   });
+
+  it("remembers unlisted folders across restarts with the same ids", () => {
+    const file = join(mkdtempSync(join(tmpdir(), "sulti-unlisted-")), "unlisted.json");
+    const first = new SessionRegistry(sessions, file);
+    const ids = ["E:\\a\\demo", "E:\\b\\demo"].map((cwd) => first.forHookCwd(cwd).id);
+    const again = new SessionRegistry(sessions, file);
+    expect(again.list().filter((s) => s.unlisted).map((s) => s.id)).toEqual(ids);
+    // A remembered folder that is now in sessions.json is not listed twice.
+    const listed = parseSessions([{ name: "Demo", cwd: "E:\\a\\demo" }]);
+    expect(new SessionRegistry(listed, file).list().map((s) => s.id)).toEqual(["demo", ids[1]]);
+  });
 });

@@ -115,6 +115,21 @@ describe("companion against the mock app-server", () => {
     expect(t.mockLog().filter((e) => e.method === "thread/start")).toHaveLength(2);
   });
 
+  it("a chat another Codex window holds is continued as a copy", async () => {
+    const { t, phone } = await setup();
+    phone.send({ type: "prompt.send", sessionId: "sole-harbor", text: "[locked] Run the tests." });
+    await phone.waitFor((m) => m.type === "answer" && m.sessionId === "sole-harbor");
+    const locked = turnStarts(t)[0]!.params.threadId;
+    phone.send({ type: "thread.new", sessionId: "sole-harbor" });
+    phone.send({ type: "thread.attach", sessionId: "sole-harbor", threadId: locked });
+    await phone.waitFor((m) => m.type === "toast" && /continues a copy/.test(m.message));
+    const current = (m: CompanionMessage) => (m.type === "sessions" ? m.sessions.find((s) => s.id === "sole-harbor")?.threadId : null);
+    const copy = current(await phone.waitFor((m) => !!current(m) && current(m) !== locked))!;
+    phone.send({ type: "prompt.send", sessionId: "sole-harbor", text: "Keep going." });
+    for (let i = 0; i < 100 && turnStarts(t).length < 2; i++) await sleep(30);
+    expect(turnStarts(t)[1]!.params.threadId).toBe(copy);
+  });
+
   it("interrupt stops the running turn", async () => {
     const { t, phone } = await setup();
     phone.send({ type: "prompt.send", sessionId: "sole-harbor", text: "[scenario:interrupted] Investigate the auth module." });
@@ -285,7 +300,7 @@ describe("listen half: Stop hook, dedupe, audio, copy", () => {
     expect(part.status).toBe(206);
     expect(part.headers.get("content-range")).toMatch(/^bytes 0-43\/\d+$/);
     expect((await part.arrayBuffer()).byteLength).toBe(44);
-    expect((await fetch(base + u.url.replace(/sig=./, "sig=x"))).status).toBe(403);
+    expect((await fetch(base + u.url.replace(/sig=(.)/, (_, c: string) => "sig=" + (c === "x" ? "y" : "x")))).status).toBe(403);
     expect((await fetch(base + `/api/answers/${a.id}/audio`)).status).toBe(403);
   });
 

@@ -14,6 +14,7 @@ export interface RequestMap {
   initialize: [InitializeParams, InitializeResponse];
   "thread/start": [V2.ThreadStartParams, V2.ThreadStartResponse];
   "thread/resume": [V2.ThreadResumeParams, V2.ThreadResumeResponse];
+  "thread/fork": [V2.ThreadForkParams, V2.ThreadForkResponse];
   "thread/list": [V2.ThreadListParams, V2.ThreadListResponse];
   "thread/read": [V2.ThreadReadParams, V2.ThreadReadResponse];
   "turn/start": [V2.TurnStartParams, V2.TurnStartResponse];
@@ -33,6 +34,7 @@ export const ALLOWED_METHODS: ReadonlySet<string> = new Set<RequestMethod>([
   "initialize",
   "thread/start",
   "thread/resume",
+  "thread/fork",
   "thread/list",
   "thread/read",
   "turn/start",

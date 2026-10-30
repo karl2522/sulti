@@ -58,6 +58,7 @@ export class Hub {
         this.broadcast({ type: "session.status", sessionId: sid, status, since: this.d.registry.since(sid) ?? Date.now() });
       },
       outcome: (sid: string, o: TurnOutcome) => this.onOutcome(sid, o),
+      thread: () => this.broadcast(this.sessionsMsg()),
       approvalRequest: (a: PendingApproval) => this.broadcast(this.approvalMsg(a)),
       approvalResolved: (requestId: string) => this.broadcast({ type: "approval.resolved", requestId }),
       activity: (sid: string, item: ActivityItem) => {
@@ -181,9 +182,8 @@ export class Hub {
         const s = this.promptable(msg.sessionId);
         if (this.bridge.isBusy(s.id)) throw new Error(`${s.name} is still working. Stop the turn first.`);
         await this.bridge.attachThread(s, msg.threadId);
-        this.broadcast(this.sessionsMsg());
         this.broadcast({ type: "goal", sessionId: s.id, goal: toGoal(await this.bridge.getGoal(s)) });
-        return c.send({ type: "toast", level: "info", message: `Switched ${s.name} to that chat.` });
+        return;
       }
       case "thread.new":
         return this.newChat(c, this.promptable(msg.sessionId));

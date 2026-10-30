@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import type { SessionInfo, SessionStatus } from "@sulti/core";
-import { readJsonText } from "./store.js";
+import { readJson, readJsonText, writeJson } from "./store.js";
 import { folderName, isSameOrInside, normalizeWinPath } from "./paths.js";
 
 /** Values confirmed against the installed Codex in T1 (docs/PROTOCOL_NOTES.md). */
@@ -58,14 +58,25 @@ export function loadSessions(dataDir: string): Session[] {
   return parseSessions(raw);
 }
 
-/** Session registry: configured sessions plus "unlisted" ones discovered from Stop hooks. */
+/**
+ * Session registry: configured sessions plus "unlisted" ones discovered from
+ * Stop hooks. Unlisted folders are remembered (id and cwd) in unlistedFile so
+ * a companion restart doesn't drop terminals that are still open, and their
+ * ids, which stored answers point at, never change.
+ */
 export class SessionRegistry {
   private readonly sessions = new Map<string, Session>();
   private readonly status = new Map<string, SessionStatus>();
   private readonly statusSince = new Map<string, number>();
 
-  constructor(configured: Session[]) {
+  // ponytail: remembered folders are never dropped; prune by last answer age if the list grows.
+  constructor(configured: Session[], private readonly unlistedFile?: string) {
     for (const s of configured) this.sessions.set(s.id, s);
+    // A folder since added to sessions.json resolves to that session and is skipped.
+    const saved = unlistedFile ? readJson<unknown>(unlistedFile, []) : [];
+    for (const x of Array.isArray(saved) ? (saved as { id?: unknown; cwd?: unknown }[]) : []) {
+      if (typeof x?.cwd === "string" && typeof x.id === "string" && !this.findByCwd(x.cwd)) this.addUnlisted(x.cwd, x.id);
+    }
   }
 
   list(): Session[] {
@@ -91,8 +102,14 @@ export class SessionRegistry {
   forHookCwd(cwd: string): Session {
     const found = this.findByCwd(cwd);
     if (found) return found;
+    const s = this.addUnlisted(cwd);
+    if (this.unlistedFile) writeJson(this.unlistedFile, this.list().filter((x) => x.unlisted).map((x) => ({ id: x.id, cwd: x.cwd })));
+    return s;
+  }
+
+  private addUnlisted(cwd: string, savedId?: string): Session {
     const name = folderName(cwd);
-    let id = "unlisted-" + slugify(name);
+    let id = savedId ?? "unlisted-" + slugify(name);
     while (this.sessions.has(id)) id += "-2";
     const s: Session = { id, name, cwd, aliases: [], sandbox: "read-only", approvalPolicy: "on-request", unlisted: true };
     this.sessions.set(id, s);

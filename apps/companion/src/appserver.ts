@@ -161,6 +161,8 @@ export interface BridgeEvents {
   goal(sessionId: string, goal: V2.ThreadGoal | null): void;
   delta(sessionId: string, turnId: string): void;
   toast(level: "info" | "warn" | "error", message: string): void;
+  /** The session now points at a different Codex thread. */
+  thread(sessionId: string): void;
 }
 
 /** Text input item; app-server requires text_elements. */
@@ -231,33 +233,48 @@ export class CodexBridge {
   }
 
   async ensureThread(s: Session): Promise<string> {
-    const client = await this.conn.ready();
     const known = this.threads.get(s.id);
     if (known && this.loaded.has(known)) return known;
-    const policy = { cwd: s.cwd, sandbox: s.sandbox, approvalPolicy: s.approvalPolicy } as const;
     if (known) {
       try {
-        await client.request("thread/resume", { threadId: known, ...policy, excludeTurns: true });
-        this.bind(s.id, known);
-        return known;
+        return await this.attachThread(s, known);
       } catch (err) {
         this.log(`thread/resume failed for ${s.id}, starting a new thread: ${(err as Error).message}`);
       }
     }
-    const res = await client.request("thread/start", policy);
-    this.threads.set(s.id, res.thread.id);
-    this.bind(s.id, res.thread.id);
+    const client = await this.conn.ready();
+    const res = await client.request("thread/start", { cwd: s.cwd, sandbox: s.sandbox, approvalPolicy: s.approvalPolicy });
+    this.use(s, res.thread.id);
     return res.thread.id;
   }
 
-  /** Attach a session to an existing thread (from thread/list). */
-  async attachThread(s: Session, threadId: string): Promise<void> {
+  /**
+   * Point a session at an existing thread. When another Codex process (the
+   * desktop app, an open terminal) holds it, Codex refuses the resume with
+   * "already has an active writer"; continue a copy of it instead.
+   */
+  async attachThread(s: Session, threadId: string): Promise<string> {
     const client = await this.conn.ready();
-    await client.request("thread/resume", { threadId, cwd: s.cwd, sandbox: s.sandbox, approvalPolicy: s.approvalPolicy, excludeTurns: true });
+    const params = { threadId, cwd: s.cwd, sandbox: s.sandbox, approvalPolicy: s.approvalPolicy, excludeTurns: true };
+    let id = threadId;
+    try {
+      await client.request("thread/resume", params);
+    } catch (err) {
+      if (!/active writer/i.test((err as Error).message)) throw err;
+      id = (await client.request("thread/fork", params)).thread.id;
+      this.events.toast("info", `That chat is open in Codex on your PC, so ${s.name} continues a copy of it.`);
+    }
+    this.use(s, id);
+    return id;
+  }
+
+  private use(s: Session, threadId: string): void {
+    this.bind(s.id, threadId);
     const old = this.threads.get(s.id);
+    if (old === threadId) return;
     if (old) this.threadToSession.delete(old);
     this.threads.set(s.id, threadId);
-    this.bind(s.id, threadId);
+    this.events.thread(s.id);
   }
 
   async listThreads(s: Session): Promise<V2.Thread[]> {

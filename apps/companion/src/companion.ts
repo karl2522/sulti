@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AnswerStore } from "./answers.js";
 import { AppServerConnection, CodexBridge } from "./appserver.js";
@@ -42,7 +42,7 @@ export function phoneDistDir(): string | null {
 export async function startCompanion(config: Config, o: CompanionOverrides = {}): Promise<CompanionHandle> {
   const log = o.log ?? (() => {});
   const secrets = loadSecrets(config.dataDir);
-  const registry = new SessionRegistry(loadSessions(config.dataDir));
+  const registry = new SessionRegistry(loadSessions(config.dataDir), join(config.dataDir, "unlisted.json"));
   const threads = new ThreadStore(config.dataDir);
   const answers = new AnswerStore(config.dataDir);
   const pairing = new Pairing(config.dataDir);
