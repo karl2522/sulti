@@ -11,6 +11,8 @@ export interface ConnectionHandlers {
 
 const AUTH_REJECTED = 4401;
 const MAX_BACKOFF_MS = 15_000;
+/** How long a woken-up socket gets to answer before we treat it as dead. */
+const PROBE_MS = 5000;
 
 export function defaultWsUrl(): string {
   const scheme = location.protocol === "https:" ? "wss" : "ws";
@@ -23,6 +25,7 @@ export class Connection {
   private authed = false;
   private attempt = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private probe: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
 
   constructor(
@@ -44,6 +47,7 @@ export class Connection {
     document.removeEventListener("visibilitychange", this.onVisible);
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    this.clearProbe();
     this.ws?.close(1000);
     this.ws = null;
   }
@@ -67,6 +71,7 @@ export class Connection {
     ws.onopen = () => ws.send(JSON.stringify({ type: "auth", deviceToken: this.token } satisfies PhoneMessage));
     ws.onmessage = (e) => {
       if (typeof e.data !== "string") return;
+      this.clearProbe();
       const msg = parseCompanionMessage(e.data);
       if (!msg) return;
       if (msg.type === "auth.ok") {
@@ -80,6 +85,7 @@ export class Connection {
       if (this.ws !== ws) return;
       this.ws = null;
       this.authed = false;
+      this.clearProbe();
       if (this.stopped) return;
       if (e.code === AUTH_REJECTED && e.reason !== "auth timeout") {
         this.stopped = true;
@@ -110,6 +116,24 @@ export class Connection {
   };
 
   private readonly onVisible = (): void => {
-    if (document.visibilityState === "visible") this.reconnectNow();
+    if (document.visibilityState !== "visible") return;
+    if (!this.ready) return this.reconnectNow();
+    // iOS can suspend the page and leave the socket dead without a close event.
+    // Ask for the session list (fresh state anyway); no reply means reconnect.
+    this.send({ type: "sessions.list" });
+    this.probe ??= setTimeout(() => {
+      this.probe = null;
+      const dead = this.ws;
+      this.ws = null;
+      this.authed = false;
+      dead?.close();
+      this.h.onStatus("offline");
+      this.reconnectNow();
+    }, PROBE_MS);
   };
+
+  private clearProbe(): void {
+    if (this.probe) clearTimeout(this.probe);
+    this.probe = null;
+  }
 }

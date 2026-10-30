@@ -148,6 +148,8 @@ function Main({ device, onForget }: { device: Device; onForget: () => void }) {
       }
       case "audio.url":
         return player.onAudioUrl(m.answerId, m.url);
+      case "audio.failed":
+        return player.onAudioFailed(m.answerId, m.message);
       case "approval.request":
         if (backlog) return;
         if (!sheetRef.current) return openSheet({ kind: "approval", requestId: m.requestId });

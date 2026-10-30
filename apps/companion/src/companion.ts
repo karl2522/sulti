@@ -64,7 +64,10 @@ export async function startCompanion(config: Config, o: CompanionOverrides = {})
     log,
   });
   hub.bridge = new CodexBridge(conn, threads, hub.bridgeEvents(), log);
-  conn.onUp(() => void hub.bridge.resumeKnown(registry.list()));
+  // Shared mode: resume up front so turns started in a terminal reach the phone.
+  // stdio resumes lazily; resuming every chat at startup would lock chats you
+  // may want to continue in a terminal or the Codex app.
+  if (config.mode === "shared") conn.onUp(() => void hub.bridge.resumeKnown(registry.list()));
 
   const phone = await startPhoneServer(
     { hub, pairing, answers, signingSecret: secrets.signingSecret, publicUrl: () => config.publicUrl, dev: config.dev, staticDir: phoneDistDir(), log },

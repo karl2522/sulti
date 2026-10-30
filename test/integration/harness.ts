@@ -61,6 +61,7 @@ export async function startTestCompanion(opts: { scenario?: string; mockArgs?: s
   const c = await startCompanion(config, {
     backoff: [50, 100],
     renderAudio: async (text, out) => {
+      if (text.includes("TTSFAIL")) throw new Error("no voice");
       rendered.push(text);
       writeFileSync(out, fakeWav());
     },

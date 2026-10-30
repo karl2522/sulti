@@ -186,6 +186,7 @@ export const CompanionMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("approval.resolved"), requestId: id }),
   z.object({ type: z.literal("threads"), sessionId: id, threads: z.array(ThreadSummary) }),
   z.object({ type: z.literal("audio.url"), answerId: id, url: z.string() }),
+  z.object({ type: z.literal("audio.failed"), answerId: id, message: z.string() }),
   z.object({ type: z.literal("toast"), level: z.enum(["info", "warn", "error"]), message: z.string() }),
 ]);
 export type CompanionMessage = z.infer<typeof CompanionMessage>;

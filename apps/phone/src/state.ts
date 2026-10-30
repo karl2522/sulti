@@ -86,7 +86,9 @@ export function reducer(s: AppState, a: Action): AppState {
 function onMessage(s: AppState, m: CompanionMessage): AppState {
   switch (m.type) {
     case "auth.ok":
-      return { ...s, deviceId: m.deviceId, version: m.version, host: m.host ?? null };
+      // The companion re-sends what is still pending right after this; anything
+      // resolved while we were away must not linger.
+      return { ...s, deviceId: m.deviceId, version: m.version, host: m.host ?? null, approvals: [], activity: {} };
     case "sessions":
       return { ...s, loaded: true, sessions: m.sessions, activeSessionId: m.activeSessionId };
     case "session.status":
@@ -113,6 +115,7 @@ function onMessage(s: AppState, m: CompanionMessage): AppState {
     case "toast":
       return toast(s, m.level, m.message);
     case "audio.url":
+    case "audio.failed":
       return s; // handled by the player
     case "activity":
       return { ...s, activity: { ...s.activity, [m.sessionId]: m.items } };

@@ -248,6 +248,24 @@ describe("listen half: Stop hook, dedupe, audio, copy", () => {
     await phone.waitFor((m) => m.type === "toast" && /only listen/.test(m.message));
   });
 
+  it("a reconnecting phone gets each session's latest answer, not only the 20 newest", async () => {
+    const { t, phone } = await setup();
+    await postHook(t, { event: "Stop", cwd: "D:\\work\\lead-tracker", turnId: "quiet-1", lastAssistantMessage: "Lead import fixed." });
+    for (let i = 0; i < 21; i++) await postHook(t, { event: "Stop", cwd: "D:\\work\\sole-harbor", turnId: "busy-" + i, lastAssistantMessage: "Step " + i + " done." });
+    await phone.waitFor((m) => m.type === "answer" && m.turnId === "busy-20");
+    const again = await Phone.connect(t);
+    phones.push(again);
+    await again.waitFor((m) => m.type === "answer" && m.turnId === "quiet-1", 3000);
+  });
+
+  it("a failed PC voice render tells the phone instead of hanging", async () => {
+    const { t, phone } = await setup();
+    await postHook(t, { event: "Stop", cwd: "D:\\work\\sole-harbor", turnId: "tts-1", lastAssistantMessage: "TTSFAIL here." });
+    const a = (await phone.waitFor("answer")) as Of<"answer">;
+    phone.send({ type: "answer.audioUrl", answerId: a.id });
+    await phone.waitFor((m) => m.type === "audio.failed" && m.answerId === a.id);
+  });
+
   it("rejects hook posts without the secret or with a browser Origin", async () => {
     const { t } = await setup();
     expect((await postHook(t, { cwd: "D:\\x", lastAssistantMessage: "x" }, "wrong")).status).toBe(401);

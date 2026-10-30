@@ -75,24 +75,27 @@ export class AppServerConnection {
   private async connect(): Promise<void> {
     if (this.stopped) return;
     const log = this.opts.log ?? (() => {});
+    let client: AppServerClient | null = null;
     try {
-      const client = this.opts.mode === "shared" ? await this.connectShared() : this.spawnStdio();
-      client.onClose((reason) => {
-        if (this.current === client) this.current = null;
+      const c = (client = this.opts.mode === "shared" ? await this.connectShared() : this.spawnStdio());
+      c.onClose((reason) => {
+        if (this.current === c) this.current = null;
         log(`app-server connection closed: ${reason}`);
         for (const cb of this.downCbs) cb(reason);
         this.scheduleReconnect();
       });
-      await client.initialize({ name: APP_SLUG, title: APP_NAME, version: APP_VERSION });
-      this.current = client;
+      await c.initialize({ name: APP_SLUG, title: APP_NAME, version: APP_VERSION });
+      this.current = c;
       this.attempt = 0;
       log(`app-server ready (${this.opts.mode})`);
-      for (const cb of this.upCbs) cb(client);
+      for (const cb of this.upCbs) cb(c);
       const waiters = this.readyWaiters;
       this.readyWaiters = [];
-      for (const w of waiters) w(client);
+      for (const w of waiters) w(c);
     } catch (err) {
       log(`app-server start failed: ${(err as Error).message}`);
+      // A server that never finished the handshake would otherwise linger as an orphan process.
+      client?.close();
       this.scheduleReconnect();
     }
   }
@@ -424,6 +427,8 @@ export class CodexBridge {
       const a = toActivity(p.item, Date.now());
       if (a) this.events.activity(sid, a);
     }
+    // Paths are only needed while a file change can still ask for approval.
+    if (method === "item/completed") this.fileChanges.delete(String((p.item as { id?: unknown } | undefined)?.id));
     const outcome = this.tracker.feed(method, params);
     if (outcome) {
       if (threadId) this.activeTurn.delete(threadId);

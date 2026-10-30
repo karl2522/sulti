@@ -52,6 +52,7 @@ export interface Player {
   /** PC voice: ask the PC to render this answer early so Play starts instantly. */
   prefetch(answer: Answer): void;
   onAudioUrl(answerId: string, url: string): void;
+  onAudioFailed(answerId: string, message: string): void;
 }
 
 /** Signed audio URLs live 10 minutes; refresh a little early. */
@@ -259,6 +260,18 @@ export function usePlayer(settings: Settings, send: (m: PhoneMessage) => boolean
   );
 
   // PC voice: mirror the <audio> element into our state and the lock screen.
+  const onAudioFailed = useCallback(
+    (answerId: string, message: string) => {
+      requested.current.delete(answerId);
+      // A failed prefetch stays quiet; Play asks again.
+      if (pending.current?.id !== answerId) return;
+      pending.current = null;
+      update(null);
+      notify("warn", message);
+    },
+    [notify, update],
+  );
+
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
@@ -336,6 +349,5 @@ export function usePlayer(settings: Settings, send: (m: PhoneMessage) => boolean
     if ("mediaSession" in navigator) navigator.mediaSession.playbackState = now?.mode === "B" ? (now.status === "playing" ? "playing" : "paused") : "none";
   }, [now]);
 
-  return { now, reading, audioRef, hasSpeech: !!synth, voices, play, toggle, pause, resume, restart, stop, step, jump, setRate, test, prefetch, onAudioUrl };
+  return { now, reading, audioRef, hasSpeech: !!synth, voices, play, toggle, pause, resume, restart, stop, step, jump, setRate, test, prefetch, onAudioUrl, onAudioFailed };
 }
-

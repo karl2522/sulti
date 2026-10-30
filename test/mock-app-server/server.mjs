@@ -162,7 +162,8 @@ async function handleRequest(id, method, params = {}) {
     case "turn/start": {
       const t = threads.get(params.threadId);
       if (!t) return fail(-32600, "thread not found");
-      const turnId = `turn-${++seq}`;
+      // Unique across restarts, like real Codex ids (the companion dedupes answers by turn id).
+      const turnId = `turn-${++seq}-${process.pid}`;
       const input = params.input ?? [];
       const text = input.filter((i) => i.type === "text").map((i) => i.text).join(" ");
       const skill = input.find((i) => i.type === "skill");

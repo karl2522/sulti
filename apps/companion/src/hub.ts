@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { route, type ActivityItem, type CompanionMessage, type Goal, type Intent, type PhoneMessage, toSpeechText } from "@sulti/core";
 import type { V2 } from "@sulti/protocol";
 import { upsertActivity } from "./activity.js";
-import type { AnswerStore } from "./answers.js";
+import { MAX_ANSWERS, type AnswerStore } from "./answers.js";
 import { CodexBridge, type PendingApproval } from "./appserver.js";
 import type { Session, SessionRegistry } from "./sessions.js";
 import { signedAudioPath } from "./signing.js";
@@ -84,7 +84,10 @@ export class Hub {
   /** Initial state for a freshly authenticated phone. */
   async welcome(c: PhoneClient): Promise<void> {
     c.send(this.sessionsMsg());
-    for (const a of this.d.answers.recent(20)) c.send({ type: "answer", ...a });
+    // The 20 newest, plus each session's latest so a quiet session still shows its answer.
+    const latest = new Map(this.d.answers.recent(MAX_ANSWERS).map((a) => [a.sessionId, a]));
+    const backlog = new Set([...this.d.answers.recent(20), ...latest.values()]);
+    for (const a of [...backlog].sort((x, y) => x.createdAt - y.createdAt)) c.send({ type: "answer", ...a });
     for (const a of this.bridge.pendingApprovals()) c.send(this.approvalMsg(a));
     for (const [sessionId, items] of this.activity) c.send({ type: "activity", sessionId, items });
     if (this.activeSessionId) await this.sendSessionDetails(c, this.activeSessionId);
@@ -283,7 +286,12 @@ export class Hub {
         job = this.d.renderAudio(a.speechText || toSpeechText(a.text), this.d.answers.audioPath(a.id)).finally(() => this.renders.delete(a.id));
         this.renders.set(a.id, job);
       }
-      await job;
+      try {
+        await job;
+      } catch (err) {
+        this.d.log?.(`audio render failed for ${a.id}: ${(err as Error).message}`);
+        return c.send({ type: "audio.failed", answerId: a.id, message: "Your PC couldn't read this answer aloud. Try the phone voice." });
+      }
     }
     c.send({ type: "audio.url", answerId: a.id, url: signedAudioPath(this.d.signingSecret, a.id) });
   }
