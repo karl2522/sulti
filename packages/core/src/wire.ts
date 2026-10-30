@@ -104,6 +104,8 @@ export const CodexIntent = z.object({
     z.object({ type: z.literal("goal.clear") }),
     z.object({ type: z.literal("interrupt") }),
     z.object({ type: z.literal("skill"), skill: z.string().min(1), text: z.string().optional() }),
+    /** Start a fresh Codex chat in this session, optionally with a first prompt. */
+    z.object({ type: z.literal("thread.new"), text: z.string().optional() }),
   ]),
   ...intentMeta,
 });
@@ -141,6 +143,7 @@ export const PhoneMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("answer.audioUrl"), answerId: id }),
   z.object({ type: z.literal("thread.list"), sessionId: id }),
   z.object({ type: z.literal("thread.attach"), sessionId: id, threadId: id }),
+  z.object({ type: z.literal("thread.new"), sessionId: id }),
 ]);
 export type PhoneMessage = z.infer<typeof PhoneMessage>;
 

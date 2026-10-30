@@ -37,6 +37,7 @@ const GOAL_GET = new Set(["whats the current goal", "whats the goal", "what is t
 const GOAL_PAUSE = new Set(["pause the goal", "pause goal"]);
 const GOAL_RESUME = new Set(["resume the goal", "resume goal", "unpause the goal", "continue the goal"]);
 const GOAL_CLEAR = new Set(["clear the goal", "clear goal", "remove the goal", "delete the goal", "cancel the goal", "drop the goal"]);
+const NEW_CHAT = new Set(["new chat", "start a new chat", "start new chat", "new conversation", "start a new conversation", "fresh chat"]);
 const COPY: [string, "ask" | "phone" | "pc"][] = [
   ["copy the response", "ask"], ["copy the answer", "ask"], ["copy it", "ask"], ["copy that", "ask"], ["copy", "ask"],
   ["copy to phone", "phone"], ["copy it to my phone", "phone"], ["copy to my phone", "phone"],
@@ -53,6 +54,17 @@ export function route(utterance: string, ctx: RouteContext): RouteOutput {
   const flat = norm.join(" ").replace(/\s+/g, " ").trim();
   if (!flat) return { intent: null, echo: "I didn't catch anything." };
   const sessionName = (id: string | null) => ctx.sessions.find((s) => s.id === id)?.name ?? "no session";
+
+  // 0. "/new [first prompt]" starts a fresh chat in the active session.
+  const slashNew = /^\s*\/new\b\s*([\s\S]*)$/i.exec(utterance);
+  if (slashNew) {
+    if (!ctx.activeSessionId) return { intent: null, echo: "No active session. Pick a session first." };
+    const first = slashNew[1]!.trim();
+    return {
+      intent: { kind: "codex", sessionId: ctx.activeSessionId, action: { type: "thread.new", ...(first ? { text: first } : {}) }, confidence: 1, needsConfirm: false },
+      echo: `Start a new chat (${sessionName(ctx.activeSessionId)})`,
+    };
+  }
 
   // 1. Approval words: never approve, only show pending approvals.
   if (APPROVAL_WORDS.has(flat)) {
@@ -110,6 +122,7 @@ export function route(utterance: string, ctx: RouteContext): RouteOutput {
     return { intent: { kind: "codex", sessionId: sid, action, confidence: clamp(targetConfidence), needsConfirm: false }, echo: `${echo} (${sessionName(sid)})` };
   };
   if (INTERRUPT.has(rest)) return codex({ type: "interrupt" }, "Stop the current turn");
+  if (NEW_CHAT.has(rest)) return codex({ type: "thread.new" }, "Start a new chat");
   if (GOAL_GET.has(rest)) return codex({ type: "goal.get" }, "Read the goal");
   if (GOAL_PAUSE.has(rest)) return codex({ type: "goal.update", status: "paused" }, "Pause the goal");
   if (GOAL_RESUME.has(rest)) return codex({ type: "goal.update", status: "active" }, "Resume the goal");

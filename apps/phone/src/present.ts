@@ -1,7 +1,15 @@
-import type { ActivityItem, Answer, SessionInfo } from "@sulti/core";
+import type { ActivityItem, Answer, SessionInfo, ThreadSummary } from "@sulti/core";
 import type { AppState, ApprovalCard } from "./state.js";
 
 export type Tone = "coral" | "lagoon" | "lilac" | "muted";
+
+/** Which chat a session's prompts go to: [title, detail]. */
+export function chatLine(s: SessionInfo, threads: ThreadSummary[] | undefined): [string, string] {
+  if (!s.threadId) return ["New chat", "Starts with your next message"];
+  const t = threads?.find((x) => x.id === s.threadId);
+  if (!t) return ["Current chat", "Tap to switch chats"];
+  return [t.name ?? firstLine(t.preview || "Untitled chat", 120), "Updated " + ago(t.updatedAt)];
+}
 
 export interface SessionView {
   session: SessionInfo;

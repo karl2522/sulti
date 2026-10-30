@@ -70,27 +70,39 @@ function Threads({ sessionId }: { sessionId: string }) {
   const close = useSheetClose();
   const session = state.sessions.find((s) => s.id === sessionId);
   const threads = state.threads[sessionId];
+  const busy = session?.status === "working" || session?.status === "waitingApproval";
   useEffect(() => {
     send({ type: "thread.list", sessionId });
   }, [send, sessionId]);
   return (
     <div className="sheet-body">
-      <h2 className="sheet-title">Continue a conversation</h2>
-      <p className="muted">Pick a Codex thread from this folder. New prompts from your phone will continue it.</p>
+      <h2 className="sheet-title">Chats</h2>
+      <p className="muted">{busy ? "Codex is working. Stop the turn before switching chats." : "Your messages go to the chat you pick. A chat from a terminal continues here; reopen it there with codex resume to see the new messages."}</p>
+      <ul className="group">
+        <li className="row">
+          <button type="button" className="row-main press-row" disabled={busy || !session?.threadId} onClick={() => send({ type: "thread.new", sessionId }) && close()}>
+            <Icon name="plus" size={20} stroke={2.2} />
+            <span className="row-text">
+              <span className="row-title">New chat</span>
+              <span className="row-detail">{session?.threadId ? "Start fresh in this folder" : "Already on a new chat"}</span>
+            </span>
+          </button>
+        </li>
+      </ul>
       {!threads ? (
-        <span className="sk sk-line" aria-label="Loading threads" />
+        <span className="sk sk-line" aria-label="Loading chats" />
       ) : !threads.length ? (
-        <p className="muted">No threads in this folder yet.</p>
+        <p className="muted">No chats in this folder yet.</p>
       ) : (
         <ul className="group">
           {threads.map((t) => {
             const current = t.id === session?.threadId;
             return (
               <li key={t.id} className="row">
-                <button type="button" className="row-main press-row" disabled={current} onClick={() => send({ type: "thread.attach", sessionId, threadId: t.id }) && close()}>
+                <button type="button" className="row-main press-row" disabled={current || busy} onClick={() => send({ type: "thread.attach", sessionId, threadId: t.id }) && close()}>
                   <span className="row-text">
-                    <span className="row-title clamp-2">{t.name ?? firstLine(t.preview || "Untitled thread", 120)}</span>
-                    <span className="row-detail">{(current ? "Attached, " : "") + ago(t.updatedAt)}</span>
+                    <span className="row-title clamp-2">{t.name ?? firstLine(t.preview || "Untitled chat", 120)}</span>
+                    <span className="row-detail">{(current ? "Current, " : "") + ago(t.updatedAt)}</span>
                   </span>
                   {current && <Icon name="check" size={20} />}
                 </button>
@@ -145,7 +157,7 @@ const LABEL: Record<SheetSpec["kind"], string> = {
   settings: "Settings",
   pickSession: "Choose a session",
   skills: "Skills",
-  threads: "Threads",
+  threads: "Chats",
   confirm: "Confirm",
   copy: "Copy",
 };
@@ -166,4 +178,3 @@ export function SheetHost() {
     </Sheet>
   );
 }
-

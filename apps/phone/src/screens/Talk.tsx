@@ -1,7 +1,7 @@
 import { route, type Intent, type SessionInfo } from "@sulti/core";
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../appContext.js";
-import { initials } from "../present.js";
+import { chatLine, initials } from "../present.js";
 import { back } from "../router.js";
 import { sessionName, type AppState } from "../state.js";
 import { Icon } from "../ui/icons.js";
@@ -20,6 +20,7 @@ function describe(intent: Intent): [string, string, boolean] {
     if (a.type === "goal.update") return [a.status === "paused" ? "Pause the goal" : "Resume the goal", "", false];
     if (a.type === "goal.clear") return ["Clear the goal", "", false];
     if (a.type === "interrupt") return ["Stop the current turn", "", false];
+    if (a.type === "thread.new") return ["Start a new chat", a.text ?? "", false];
     return ["Skill $" + a.skill, a.text ?? "", false];
   }
   const a = intent.action;
@@ -48,6 +49,7 @@ export function Talk({ query }: { query: URLSearchParams }) {
   // Skills load per session; ask for them when talking to one we haven't opened.
   useEffect(() => {
     if (target && !state.skills[target.id] && state.conn === "open") send({ type: "session.select", sessionId: target.id });
+    if (target && !state.threads[target.id] && state.conn === "open") send({ type: "thread.list", sessionId: target.id });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target?.id, state.conn]);
 
@@ -80,13 +82,20 @@ export function Talk({ query }: { query: URLSearchParams }) {
   let note: string | null = null;
   let sessionLine = target.name;
   let heard: string | null = null;
+  let chatId = target.id;
   if (skill) card = ["Skill $" + skill, text.trim(), false];
   else if (routed?.intent) {
     card = describe(routed.intent);
-    if ("sessionId" in routed.intent) sessionLine = sessionName(state, routed.intent.sessionId);
+    if ("sessionId" in routed.intent) {
+      sessionLine = sessionName(state, routed.intent.sessionId);
+      chatId = routed.intent.sessionId;
+    }
     heard = heardAs(state, routed.intent, text);
     if (routed.intent.needsConfirm) note = "Sulti isn't sure, so it will ask you before doing this.";
   } else if (routed) note = routed.echo;
+  const chatSession = state.sessions.find((x) => x.id === chatId) ?? target;
+  const newChat = routed?.intent?.kind === "codex" && routed.intent.action.type === "thread.new";
+  const chat = newChat ? "New chat" : chatLine(chatSession, state.threads[chatSession.id])[0];
 
   return (
     <>
@@ -109,6 +118,12 @@ export function Talk({ query }: { query: URLSearchParams }) {
           <Icon name="mic" size={16} />
           <span>Tap the mic on your keyboard to dictate.</span>
         </p>
+        <p className="hint">
+          <Icon name="chat" size={16} />
+          <span>
+            Type <span className="mono">/new</span> to start a fresh chat.
+          </span>
+        </p>
 
         {(card || note) && (
           <section className="card route-card" aria-live="polite">
@@ -120,6 +135,12 @@ export function Talk({ query }: { query: URLSearchParams }) {
                   <strong>{sessionLine}</strong>
                   {heard && <span className="muted"> heard as “{heard}”</span>}
                 </dd>
+                {!card[2] && (
+                  <>
+                    <dt>Chat</dt>
+                    <dd className="truncate">{chat}</dd>
+                  </>
+                )}
                 <dt>Type</dt>
                 <dd key={card[0]} className="fade-in">
                   {card[0]}
@@ -174,4 +195,3 @@ function TalkHeader() {
     </header>
   );
 }
-

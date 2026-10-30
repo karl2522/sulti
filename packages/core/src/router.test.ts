@@ -19,6 +19,13 @@ describe("intent router: Section 9 corpus", () => {
     expect(out.intent).toMatchObject({ kind: "app", action: { type: "switchSession", sessionId: "sole-harbor" }, needsConfirm: false });
   });
 
+  it('"/new" starts a fresh chat, keeping any first prompt as typed', () => {
+    expect(r("/new").intent).toMatchObject({ kind: "codex", sessionId: "sole-harbor", action: { type: "thread.new" } });
+    expect(r("/new fix the login bug").intent).toMatchObject({ kind: "codex", action: { type: "thread.new", text: "fix the login bug" } });
+    expect(r("in kernel labs start a new chat").intent).toMatchObject({ kind: "codex", sessionId: "kernel-labs", action: { type: "thread.new" } });
+    expect(r("/newer things").intent).not.toMatchObject({ action: { type: "thread.new" } });
+  });
+
   it('"tell led tracker to ..." -> prompt Lead Tracker with sentence cleanup', () => {
     const out = r("tell led tracker to investigate the checkout problem don't modify anything yet");
     expect(out.intent).toEqual({

@@ -179,11 +179,23 @@ export class Hub {
       }
       case "thread.attach": {
         const s = this.promptable(msg.sessionId);
+        if (this.bridge.isBusy(s.id)) throw new Error(`${s.name} is still working. Stop the turn first.`);
         await this.bridge.attachThread(s, msg.threadId);
         this.broadcast(this.sessionsMsg());
-        return c.send({ type: "toast", level: "info", message: `${s.name} is now attached to that thread.` });
+        this.broadcast({ type: "goal", sessionId: s.id, goal: toGoal(await this.bridge.getGoal(s)) });
+        return c.send({ type: "toast", level: "info", message: `Switched ${s.name} to that chat.` });
       }
+      case "thread.new":
+        return this.newChat(c, this.promptable(msg.sessionId));
     }
+  }
+
+  private newChat(c: PhoneClient, s: Session, first?: string): Promise<void> | void {
+    this.bridge.newThread(s);
+    this.broadcast(this.sessionsMsg());
+    this.broadcast({ type: "goal", sessionId: s.id, goal: null });
+    if (first) return this.prompt(c, s.id, first);
+    c.send({ type: "toast", level: "info", message: `New chat in ${s.name}. Your next message starts it.` });
   }
 
   private async onUtterance(c: PhoneClient, text: string, sessionId?: string): Promise<void> {
@@ -222,6 +234,8 @@ export class Hub {
         return;
       case "interrupt":
         return this.dispatch(c, { type: "turn.interrupt", sessionId: s.id });
+      case "thread.new":
+        return this.newChat(c, s, a.text);
       case "goal.get":
         return this.dispatch(c, { type: "goal.get", sessionId: s.id });
       case "goal.set":

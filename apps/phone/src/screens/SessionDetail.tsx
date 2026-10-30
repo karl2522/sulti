@@ -1,7 +1,7 @@
 import type { ActivityItem, Goal, SessionInfo } from "@sulti/core";
 import { useEffect, useState } from "react";
 import { useApp } from "../appContext.js";
-import { activityVerb, ago, firstLine, span } from "../present.js";
+import { activityVerb, ago, chatLine, firstLine, span } from "../present.js";
 import { navigate } from "../router.js";
 import { latestAnswer } from "../state.js";
 import { AnswerControls } from "../ui/AnswerControls.js";
@@ -21,6 +21,11 @@ export function SessionDetail({ id }: { id: string }) {
     if (s && !s.unlisted && state.conn === "open" && state.activeSessionId !== s.id) send({ type: "session.select", sessionId: s.id });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s?.id, state.conn]);
+  // The chat list names the current chat; refresh it when the session moves to another chat.
+  useEffect(() => {
+    if (s && !s.unlisted && state.conn === "open") send({ type: "thread.list", sessionId: s.id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s?.id, s?.threadId, state.conn]);
 
   if (!s) {
     return (
@@ -41,22 +46,12 @@ export function SessionDetail({ id }: { id: string }) {
   const answer = latestAnswer(state, s.id);
   const busy = s.status === "working" || s.status === "waitingApproval";
   const talk = (skill?: string) => navigate("/talk?to=" + encodeURIComponent(s.id) + (skill ? "&skill=" + encodeURIComponent(skill) : ""));
+  const [chatTitle, chatDetail] = chatLine(s, state.threads[s.id]);
   let i = 0;
 
   return (
     <>
-      <PageHeader
-        title={s.name}
-        subtitle={s.id}
-        mono
-        actions={
-          !s.unlisted && (
-            <button type="button" className="icon-btn press" aria-label="Attach an existing thread" onClick={() => openSheet({ kind: "threads", sessionId: s.id })}>
-              <Icon name="dots" size={22} />
-            </button>
-          )
-        }
-      />
+      <PageHeader title={s.name} subtitle={s.id} mono />
       <div className={"scroll" + (s.unlisted ? "" : " with-dock")}>
         <div className="chip-row">
           {approval ? (
@@ -78,6 +73,34 @@ export function SessionDetail({ id }: { id: string }) {
         </div>
 
         {s.unlisted && <p className="lead">This terminal isn't in sessions.json, so Sulti only reads its answers. Add the folder there to send it prompts.</p>}
+        {!s.unlisted && (
+          <section className="section stagger" style={nth(i++)} aria-label="Chat">
+            <h2 className="section-title">Chat</h2>
+            <ul className="group">
+              <li className="row">
+                <button type="button" className="row-main press-row" aria-label={"Chat: " + chatTitle + ". Switch chats"} onClick={() => openSheet({ kind: "threads", sessionId: s.id })}>
+                  <Icon name="chat" size={20} />
+                  <span className="row-text">
+                    <span className="row-title clamp-2">{chatTitle}</span>
+                    <span className="row-detail">{chatDetail}</span>
+                  </span>
+                  <Icon name="chevronRight" size={18} stroke={2.2} />
+                </button>
+              </li>
+              {s.threadId && (
+                <li className="row">
+                  <button type="button" className="row-main press-row" disabled={busy} onClick={() => send({ type: "thread.new", sessionId: s.id })}>
+                    <Icon name="plus" size={20} stroke={2.2} />
+                    <span className="row-text">
+                      <span className="row-title">New chat</span>
+                      <span className="row-detail">{busy ? "Stop the turn first" : "Or type /new in a message"}</span>
+                    </span>
+                  </button>
+                </li>
+              )}
+            </ul>
+          </section>
+        )}
         {!s.unlisted && <GoalCard s={s} goal={state.goals[s.id]} i={i++} />}
 
         {answer && (

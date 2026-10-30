@@ -266,6 +266,14 @@ export class CodexBridge {
     return res.data;
   }
 
+  /** Forget the session's thread so its next prompt starts a fresh one. */
+  newThread(s: Session): void {
+    if (this.isBusy(s.id)) throw new Error(`${s.name} is still working. Stop the turn first.`);
+    const old = this.threads.get(s.id);
+    if (old) this.threadToSession.delete(old);
+    this.threads.delete(s.id);
+  }
+
   async startTurn(s: Session, input: V2.UserInput[]): Promise<string> {
     const threadId = await this.ensureThread(s);
     const client = await this.conn.ready();

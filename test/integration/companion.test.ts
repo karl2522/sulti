@@ -103,6 +103,18 @@ describe("companion against the mock app-server", () => {
     expect(a.text).toBe("You declined the test run, so I did not run anything.");
   });
 
+  it("/new starts a fresh chat; the next prompt goes to a new thread", async () => {
+    const { t, phone } = await setup();
+    phone.send({ type: "prompt.send", sessionId: "sole-harbor", text: "Run the tests." });
+    await phone.waitFor((m) => m.type === "answer" && m.sessionId === "sole-harbor");
+    phone.send({ type: "utterance", text: "/new Check the docs.", sessionId: "sole-harbor" });
+    for (let i = 0; i < 100 && turnStarts(t).length < 2; i++) await sleep(30);
+    const [first, second] = turnStarts(t);
+    expect(second!.params.input[0]).toMatchObject({ type: "text", text: "Check the docs." });
+    expect(second!.params.threadId).not.toBe(first!.params.threadId);
+    expect(t.mockLog().filter((e) => e.method === "thread/start")).toHaveLength(2);
+  });
+
   it("interrupt stops the running turn", async () => {
     const { t, phone } = await setup();
     phone.send({ type: "prompt.send", sessionId: "sole-harbor", text: "[scenario:interrupted] Investigate the auth module." });
