@@ -183,6 +183,8 @@ export class CodexBridge {
   private readonly approvals = new Map<string, PendingApproval>();
   private readonly fileChanges = new Map<string, string[]>(); // itemId -> paths
   private readonly skillCache = new Map<string, V2.SkillMetadata[]>();
+  /** Turns this bridge ran, newest last: turnId -> sessionId. */
+  private readonly ownTurns = new Map<string, string>();
   private seq = 0;
 
   constructor(
@@ -224,6 +226,16 @@ export class CodexBridge {
 
   sessionForThread(threadId: string): string | undefined {
     return this.threadToSession.get(threadId);
+  }
+
+  /** The session of a turn Sulti ran itself (the Stop hook also reports those). */
+  sessionForTurn(turnId: string): string | undefined {
+    return this.ownTurns.get(turnId);
+  }
+
+  private ownTurn(turnId: string, sessionId: string): void {
+    this.ownTurns.set(turnId, sessionId);
+    if (this.ownTurns.size > 500) this.ownTurns.delete(this.ownTurns.keys().next().value!);
   }
 
   pendingApprovals(): PendingApproval[] {
@@ -310,6 +322,7 @@ export class CodexBridge {
     }
     const res = await client.request("turn/start", { threadId, input });
     this.activeTurn.set(threadId, res.turn.id);
+    this.ownTurn(res.turn.id, s.id);
     this.events.status(s.id, "working");
     return res.turn.id;
   }
@@ -403,6 +416,7 @@ export class CodexBridge {
       case "turn/started": {
         const turnId = (p.turn as { id?: string } | undefined)?.id;
         if (threadId && turnId) this.activeTurn.set(threadId, turnId);
+        if (sid && turnId) this.ownTurn(turnId, sid);
         if (sid) this.events.status(sid, "working");
         break;
       }

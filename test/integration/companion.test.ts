@@ -237,6 +237,20 @@ describe("listen half: Stop hook, dedupe, audio, copy", () => {
     });
   }
 
+  it("a hook report for Sulti's own turn, arriving before the app-server's, is filed as Sulti's answer", async () => {
+    const { t, phone } = await setup();
+    phone.send({ type: "prompt.send", sessionId: "sole-harbor", text: "[scenario:interrupted] Investigate the auth module." });
+    await phone.waitFor((m) => m.type === "session.status" && m.status === "working");
+    const turnId = [...(t.c.hub.bridge as unknown as { ownTurns: Map<string, string> }).ownTurns.keys()][0]!;
+    // A terminal-looking cwd: the turn id alone must route it to Sole Harbor.
+    expect((await postHook(t, { event: "Stop", cwd: "E:\\elsewhere", turnId, lastAssistantMessage: "Hook copy of the answer." })).status).toBe(202);
+    const a = (await phone.waitFor("answer")) as Of<"answer">;
+    expect(a).toMatchObject({ sessionId: "sole-harbor", source: "appServer", turnId, text: "Hook copy of the answer." });
+    phone.send({ type: "turn.interrupt", sessionId: "sole-harbor" });
+    await phone.waitFor((m) => m.type === "session.status" && m.status === "idle");
+    expect(phone.received.filter((m) => m.type === "sessions" && m.sessions.some((s) => s.unlisted))).toHaveLength(0);
+  });
+
   it("dedupes a hook answer against the app-server answer for the same turn", async () => {
     const { t, phone } = await setup();
     phone.send({ type: "prompt.send", sessionId: "sole-harbor", text: "Run the tests." });

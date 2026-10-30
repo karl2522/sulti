@@ -94,7 +94,16 @@ export class Hub {
   }
 
   /** Store and broadcast an answer that arrived through the Stop hook. */
-  onHookAnswer(input: { cwd: string; turnId: string | null; message: string }): void {
+  onHookAnswer(input: { cwd: string; sessionId?: string | null; turnId: string | null; message: string }): void {
+    // The Stop hook is global, so it also fires for turns Sulti runs itself, often before the
+    // app-server reports them. Keep that copy (in case the app-server never does), filed under
+    // Sulti's session as an app-server answer instead of "from a terminal".
+    const own = input.turnId ? this.bridge.sessionForTurn(input.turnId) : undefined;
+    if (own) {
+      const answer = this.d.answers.add({ sessionId: own, turnId: input.turnId!, text: input.message, source: "appServer" });
+      if (answer) this.broadcast({ type: "answer", ...answer });
+      return;
+    }
     const s = this.d.registry.forHookCwd(input.cwd);
     const isNew = !this.sessionsKnown.has(s.id);
     this.sessionsKnown.add(s.id);

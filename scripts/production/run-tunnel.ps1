@@ -12,6 +12,10 @@ $dataDir = if ($env:SULTI_DATA_DIR) { $env:SULTI_DATA_DIR } else { Join-Path $en
 $token = Join-Path $dataDir 'tunnel-token'
 $log = Join-Path $dataDir 'tunnel.log'
 
+# A restart (Stop-/Start-ScheduledTask) leaves the previous runner and cloudflared running.
+. (Join-Path $PSScriptRoot 'stop.ps1')
+Stop-SultiProcesses tunnel
+
 while ($true) {
   if (Test-Path -LiteralPath $log) { Move-Item -Force -LiteralPath $log -Destination "$log.old" }
   $p = Start-Process -FilePath $Cloudflared -ArgumentList @('tunnel', '--no-autoupdate', '--logfile', "`"$log`"", 'run', '--token-file', "`"$token`"") -NoNewWindow -PassThru -Wait

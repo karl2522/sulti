@@ -11,7 +11,8 @@
   registers "Sulti tunnel", which keeps cloudflared connected the same way. No
   administrator rights or Windows service needed.
 
-  Build first (npm run build). Run again to update; -Uninstall removes it.
+  Build first (npm run build). Run again to update (it replaces running copies);
+  -Stop stops Sulti until the next logon or install; -Uninstall removes it.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\production\install-startup.ps1 -DryRun
@@ -21,18 +22,20 @@
   powershell -ExecutionPolicy Bypass -File scripts\production\install-startup.ps1 -Uninstall
 #>
 [CmdletBinding()]
-param([switch]$Uninstall, [switch]$DryRun, [string]$NodePath)
+param([switch]$Uninstall, [switch]$Stop, [switch]$DryRun, [string]$NodePath)
 $ErrorActionPreference = 'Stop'
 $TaskName = 'Sulti companion'
 $TunnelTask = 'Sulti tunnel'
+. (Join-Path $PSScriptRoot 'stop.ps1')
 
-if ($Uninstall) {
-  if ($DryRun) { Write-Host "Would remove the scheduled tasks '$TaskName' and '$TunnelTask'."; exit 0 }
+if ($Uninstall -or $Stop) {
+  if ($DryRun) { Write-Host "Would stop Sulti$(if ($Uninstall) { " and remove the scheduled tasks '$TaskName' and '$TunnelTask'" })."; exit 0 }
   foreach ($t in @($TaskName, $TunnelTask)) {
     Stop-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue
-    Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue
+    if ($Uninstall) { Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue }
   }
-  Write-Host "Removed '$TaskName' and '$TunnelTask'."
+  Stop-SultiProcesses all
+  Write-Host $(if ($Uninstall) { "Stopped Sulti and removed '$TaskName' and '$TunnelTask'." } else { 'Stopped Sulti. It starts again at your next logon, or run this script without -Stop.' })
   exit 0
 }
 
@@ -70,6 +73,8 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
 $tasks = @{ $TaskName = $arguments }
 if ($tunnel) { $tasks[$TunnelTask] = $tunnel }
+foreach ($name in $tasks.Keys) { Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue }
+Stop-SultiProcesses all
 foreach ($name in $tasks.Keys) {
   $action = New-ScheduledTaskAction -Execute $conhost -Argument $tasks[$name] -WorkingDirectory $repo
   Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null

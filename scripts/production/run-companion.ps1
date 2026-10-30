@@ -16,10 +16,13 @@ New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 $log = Join-Path $dataDir 'companion.log'
 $err = Join-Path $dataDir 'companion.err.log'
 
+# A restart (Stop-/Start-ScheduledTask) leaves the previous runner and companion holding the port.
+. (Join-Path $PSScriptRoot 'stop.ps1')
+Stop-SultiProcesses companion
+
 while ($true) {
   if (Test-Path -LiteralPath $log) { Move-Item -Force -LiteralPath $log -Destination "$log.old" }
   $p = Start-Process -FilePath $Node -ArgumentList @("`"$cli`"", 'start') -WorkingDirectory $repo -NoNewWindow -PassThru -Wait -RedirectStandardOutput $log -RedirectStandardError $err
   Add-Content -LiteralPath $log -Value "$(Get-Date -Format s) companion exited with code $($p.ExitCode); restarting in 5 s"
   Start-Sleep -Seconds 5
 }
-

@@ -10,7 +10,7 @@ const MAX_HOOK_BODY = 2 * 1024 * 1024;
 
 export interface ControlServerDeps {
   hookSecret: string;
-  onStop: (stop: { cwd: string; turnId: string | null; message: string }) => void;
+  onStop: (stop: { cwd: string; sessionId: string | null; turnId: string | null; message: string }) => void;
   /** Creates a new pairing code; returns the pairing URL. */
   newPairing: () => { code: string; url: string };
   log?: (msg: string) => void;
@@ -61,7 +61,7 @@ export function startControlServer(d: ControlServerDeps, port: number): Promise<
       reply(res, parsed.ok ? 202 : 204);
       if (parsed.ok) {
         try {
-          d.onStop({ cwd: parsed.cwd, turnId: parsed.turnId, message: parsed.message });
+          d.onStop({ cwd: parsed.cwd, sessionId: parsed.sessionId, turnId: parsed.turnId, message: parsed.message });
         } catch (err) {
           d.log?.(`hook handling failed: ${(err as Error).message}`);
         }

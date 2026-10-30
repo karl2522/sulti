@@ -98,12 +98,12 @@ Open the link on the iPhone in Safari, check the code matches, tap **Connect**. 
 | Task | How |
 |---|---|
 | Logs | `%APPDATA%\sulti\companion.log`, and `hook-errors.log` for the Stop hook |
-| Restart | `Stop-ScheduledTask 'Sulti companion'; Start-ScheduledTask 'Sulti companion'` (same for `'Sulti tunnel'`) |
+| Restart | Run `install-startup.ps1` again, or `Stop-ScheduledTask 'Sulti companion'; Start-ScheduledTask 'Sulti companion'` (same for `'Sulti tunnel'`). Each runner replaces the previous copy when it starts. |
 | Update | `git pull; npm ci; npm run build`, run the tests from step 0, then restart |
 | Roll back | `git checkout <previous commit>; npm ci; npm run build`, then restart |
 | Pair another phone | `npm run pair` |
 | Remove a phone | `npm run devices -- list`, then `npm run devices -- revoke <id>`. Its open connection closes within 30 seconds. |
-| Stop serving | `Stop-ScheduledTask 'Sulti tunnel'`, or delete the custom hostname in Cloudflare |
+| Stop serving | `install-startup.ps1 -Stop` (stopping the tasks alone leaves the processes running). Sulti starts again at the next logon. |
 | Uninstall | `install-startup.ps1 -Uninstall`; delete the custom hostname, the tunnel and `sulti-origin` in Cloudflare; delete the two `trysulti` records in Vercel |
 
 ## What's public, and what protects it
