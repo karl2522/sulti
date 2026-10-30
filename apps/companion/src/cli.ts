@@ -34,18 +34,24 @@ async function start(): Promise<void> {
     if (ts) config.publicUrl = ts;
   }
   const sessions = loadSessions(config.dataDir);
-  const log = (m: string) => console.log(`[${new Date().toLocaleTimeString()}] ${m}`);
+  const log = (m: string) => console.log(`[${new Date().toLocaleString()}] ${m}`);
   // One unexpected rejection shouldn't take the phone offline; log it and keep serving.
   process.on("unhandledRejection", (err) => log(`unexpected error: ${err instanceof Error ? err.message : String(err)}`));
   const c = await startCompanion(config, { log });
   console.log(`${APP_NAME} ${APP_VERSION} running.`);
-  console.log(`  Phone server:   http://127.0.0.1:${c.phone.port}  (proxy this one with Tailscale Serve)`);
-  console.log(`  Local control:  http://127.0.0.1:${c.control.port}  (Stop hook only, never proxied)`);
+  console.log(`  Phone server:   http://127.0.0.1:${c.phone.port}  (the only port to expose, through Cloudflare Tunnel or Tailscale Serve)`);
+  console.log(`  Local control:  http://127.0.0.1:${c.control.port}  (Stop hook only, never expose)`);
   console.log(`  Sessions:       ${sessions.length ? sessions.map((s) => s.name).join(", ") : "none - copy sessions.example.json to the data folder as sessions.json"}`);
-  if (!config.publicUrl) console.log("  Public URL:     not set. The iPhone needs HTTPS: set publicUrl in config.json or run Tailscale Serve.");
-  printPairing(c.newPairing().url);
-  console.log("Press Enter for a new pairing code. Ctrl+C to quit.");
-  process.stdin.on("data", () => printPairing(c.newPairing().url));
+  if (!config.publicUrl) console.log("  Public URL:     not set. The iPhone needs HTTPS: set publicUrl in config.json (see docs/DEPLOY.md).");
+  else console.log(`  Public URL:     ${config.publicUrl}`);
+  if (process.stdout.isTTY) {
+    printPairing(c.newPairing().url);
+    console.log("Press Enter for a new pairing code. Ctrl+C to quit.");
+    process.stdin.on("data", () => printPairing(c.newPairing().url));
+  } else {
+    // Running in the background with output going to a log: never write pairing codes there.
+    console.log("  Pair a phone:   run \"npm run pair\" in the Sulti folder.");
+  }
   const shutdown = async () => {
     await c.stop();
     process.exit(0);
@@ -92,6 +98,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  console.error((err as Error).message);
+  const e = err as NodeJS.ErrnoException;
+  console.error(e.code === "EADDRINUSE" ? "Sulti is already running on this PC (its port is in use). Stop the other copy first." : e.message);
   process.exit(1);
 });

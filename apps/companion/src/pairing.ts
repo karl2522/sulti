@@ -29,7 +29,8 @@ export class Pairing {
   private readonly file: string;
   private devices: DeviceRecord[];
   private readonly codes = new Map<string, number>(); // codeHash -> expiresAt
-  private failures: number[] = [];
+  /** Failed attempts per client (Cloudflare's visitor IP), so a stranger can't lock pairing for everyone. */
+  private readonly failures = new Map<string, number[]>();
 
   constructor(
     dataDir: string,
@@ -45,25 +46,33 @@ export class Pairing {
     const bytes = randomBytes(10);
     let code = "";
     for (const b of bytes) code += alphabet[b % alphabet.length];
-    this.codes.set(sha256(code), this.now() + PAIR_CODE_TTL_MS);
+    const now = this.now();
+    for (const [h, exp] of this.codes) if (exp < now) this.codes.delete(h);
+    this.codes.set(sha256(code), now + PAIR_CODE_TTL_MS);
     return code;
   }
 
-  /** Exchange a pairing code for a device token. Rate-limited on failures. */
-  exchange(code: unknown, deviceName: unknown): PairResult {
+  /** Exchange a pairing code for a device token. Failures are rate-limited per client. */
+  exchange(code: unknown, deviceName: unknown, client = "local"): PairResult {
     const now = this.now();
-    this.failures = this.failures.filter((t) => now - t < FAIL_WINDOW_MS);
-    if (this.failures.length >= MAX_FAILED_PER_WINDOW) return { ok: false, status: 429, error: "Too many attempts. Wait a minute." };
+    for (const [k, times] of this.failures) {
+      const recent = times.filter((t) => now - t < FAIL_WINDOW_MS);
+      if (recent.length) this.failures.set(k, recent);
+      else this.failures.delete(k);
+    }
+    const mine = this.failures.get(client) ?? [];
+    if (mine.length >= MAX_FAILED_PER_WINDOW) return { ok: false, status: 429, error: "Too many attempts. Wait a minute." };
+    const fail = () => void this.failures.set(client, [...mine, now]);
     if (typeof code !== "string" || !/^[A-Z0-9]{6,32}$/.test(code.trim().toUpperCase())) {
-      this.failures.push(now);
+      fail();
       return { ok: false, status: 400, error: "Invalid pairing code." };
     }
     const h = sha256(code.trim().toUpperCase());
     const exp = this.codes.get(h);
     if (!exp || exp < now) {
       this.codes.delete(h);
-      this.failures.push(now);
-      return { ok: false, status: 401, error: "Pairing code expired or already used." };
+      fail();
+      return { ok: false, status: 401, error: "That code didn't work. It may be mistyped, already used, or older than 10 minutes." };
     }
     this.codes.delete(h); // single use
     this.reload();

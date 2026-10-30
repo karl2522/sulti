@@ -40,14 +40,16 @@ describe("pairing and auth", () => {
     expect(p.exchange(code, null)).toMatchObject({ ok: false, status: 401 });
   });
 
-  it("rate-limits failed attempts", () => {
+  it("rate-limits failed attempts per client", () => {
     let now = 5_000_000;
     const p = new Pairing(tmp(), () => now);
-    for (let i = 0; i < 5; i++) expect(p.exchange("WRONGCODE" + i, null)).toMatchObject({ ok: false, status: 401 });
+    for (let i = 0; i < 5; i++) expect(p.exchange("WRONGCODE" + i, null, "1.2.3.4")).toMatchObject({ ok: false, status: 401 });
     const good = p.createCode();
-    expect(p.exchange(good, null)).toMatchObject({ ok: false, status: 429 });
+    expect(p.exchange(good, null, "1.2.3.4")).toMatchObject({ ok: false, status: 429 });
+    // Someone else guessing doesn't lock out the owner's phone.
+    expect(p.exchange(p.createCode(), null, "5.6.7.8").ok).toBe(true);
     now += 61_000;
-    expect(p.exchange(good, null).ok).toBe(true);
+    expect(p.exchange(good, null, "1.2.3.4").ok).toBe(true);
   });
 
   it("revokes devices", () => {

@@ -23,10 +23,13 @@
     "pair": "node apps/companion/dist/cli.js pair",
     "devices": "node apps/companion/dist/cli.js devices",
     "dev:phone": "npm run dev -w @sulti/phone",
-    "smoke:live": "node apps/companion/dist/smoke-live.js"
+    "smoke:live": "node apps/companion/dist/smoke-live.js",
+    "e2e": "node test/e2e/walkthrough.mjs chromium && node test/e2e/walkthrough.mjs webkit",
+    "e2e:live": "node test/e2e/live-tunnel.mjs"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
+    "playwright-core": "1.60.0",
     "typescript": "7.0.2",
     "vitest": "5.0.5"
   }

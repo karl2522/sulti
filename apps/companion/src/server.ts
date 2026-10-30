@@ -44,12 +44,13 @@ export interface RunningServer {
   close(): Promise<void>;
 }
 
-function securityHeaders(res: ServerResponse): void {
+function securityHeaders(res: ServerResponse, https: boolean): void {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   res.setHeader("Permissions-Policy", "camera=(), geolocation=()");
+  if (https) res.setHeader("Strict-Transport-Security", "max-age=31536000");
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -116,7 +117,7 @@ export function startPhoneServer(d: PhoneServerDeps, port: number): Promise<Runn
   const originOk = (req: IncomingMessage) => typeof req.headers.origin === "string" && origins().has(req.headers.origin);
 
   const server = createServer(async (req, res) => {
-    securityHeaders(res);
+    securityHeaders(res, !!d.publicUrl()?.startsWith("https:"));
     const url = new URL(req.url ?? "/", "http://localhost");
     try {
       if (url.pathname === "/api/health" && req.method === "GET") return sendJson(res, 200, { ok: true, app: APP_NAME, version: APP_VERSION });
@@ -129,7 +130,9 @@ export function startPhoneServer(d: PhoneServerDeps, port: number): Promise<Runn
         } catch {
           return sendJson(res, 400, { error: "Invalid JSON" });
         }
-        const out = d.pairing.exchange(body.code, body.deviceName);
+        // Behind Cloudflare every request comes from cloudflared on loopback; the visitor is in this header.
+        const ip = req.headers["cf-connecting-ip"];
+        const out = d.pairing.exchange(body.code, body.deviceName, (Array.isArray(ip) ? ip[0] : ip) ?? req.socket.remoteAddress ?? "local");
         if (!out.ok) return sendJson(res, out.status, { error: out.error });
         d.log?.(`paired new device ${out.deviceId}`);
         return sendJson(res, 200, { deviceId: out.deviceId, deviceToken: out.deviceToken });

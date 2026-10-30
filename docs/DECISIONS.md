@@ -133,3 +133,9 @@ One short entry per non-obvious choice: decision, reason, alternative considered
 - **Decision:** each phone remembers which answers it has opened or played (`sulti.heard` in localStorage, last 300). On a phone's first connection, the backlog the companion replays is marked as heard.
 - **Reason:** "heard" belongs to the listener, not the PC, and two phones can disagree. Marking the backlog avoids greeting a newly paired phone with 20 "ready" answers.
 - **Alternative:** read state on the companion, shared by all devices.
+
+## D22. Production runs through a Cloudflare Tunnel to the PC
+
+- **Decision:** the companion stays on the PC and a dashboard-managed Cloudflare Tunnel publishes only port 7417 at `https://trysulti.jaredomen.com`. `cloudflared` runs as a Windows service; the companion runs at logon through a scheduled task with a restart loop. Pairing failures are limited per visitor (`CF-Connecting-IP`), HSTS is sent on HTTPS, and a background companion never logs pairing codes. Steps are in `docs/DEPLOY.md`.
+- **Reason:** Sulti has to sit next to Codex, so there's nothing to host elsewhere. A tunnel gives a stable HTTPS name with no open router ports and no app on the phone, and Cloudflare compresses and caches the static files at the edge. The domain's DNS has to move from Vercel to Cloudflare for a tunnel hostname, which is free; a partial (CNAME) setup would need a Business plan.
+- **Alternative:** Tailscale Serve, which keeps traffic on the tailnet but needs the Tailscale app on every phone; or hosting the phone app on Cloudflare Pages, which adds a cross-origin setup and still needs the tunnel to reach the PC.

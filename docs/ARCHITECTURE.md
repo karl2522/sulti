@@ -1,14 +1,14 @@
 # Architecture
 
-Sulti is two programs. The **companion** runs on the Windows PC and is the only part that talks to Codex. The **phone app** is a small web app the companion serves; the iPhone opens it over HTTPS through Tailscale Serve. Nothing runs in the cloud except Codex itself.
+Sulti is two programs. The **companion** runs on the Windows PC and is the only part that talks to Codex. The **phone app** is a small web app the companion serves; the iPhone opens it over HTTPS through a Cloudflare Tunnel (production, `https://trysulti.jaredomen.com`, see [DEPLOY.md](DEPLOY.md)) or Tailscale Serve. Nothing runs in the cloud except Codex itself and the tunnel.
 
 ```mermaid
 flowchart LR
   subgraph iPhone
     P["Sulti phone app<br/>(Safari tab or Home Screen)"]
   end
-  subgraph Tailnet
-    TS["Tailscale Serve<br/>https://&lt;pc&gt;.&lt;tailnet&gt;.ts.net"]
+  subgraph Edge
+    TS["Cloudflare Tunnel or Tailscale Serve<br/>https://trysulti.jaredomen.com"]
   end
   subgraph PC["Windows PC (all listeners on 127.0.0.1)"]
     C["Companion<br/>phone server :7417<br/>HTTP + WebSocket /ws"]
@@ -68,7 +68,7 @@ The companion runs prompts and Codex actions, and it switches sessions itself wh
 
 All listeners bind to `127.0.0.1`:
 
-- **7417.** The phone server. This is the only port Tailscale Serve proxies.
+- **7417.** The phone server. This is the only port the tunnel (or Tailscale Serve) exposes.
 - **7418.** Local control for the Stop hook and `npm run pair`. It requires a shared secret and is never proxied.
 - **4500.** The optional shared app-server.
 
@@ -83,11 +83,11 @@ The data folder is `%APPDATA%\sulti`, or `SULTI_DATA_DIR`. Nothing in it is ever
 
 ## Security model
 
-- **Reachability.** The companion is reachable only through Tailscale, so only the owner's tailnet devices can reach it, and Tailscale provides the HTTPS certificate.
-- **Pairing.** A pairing code works once and expires after 10 minutes. It's shown in the companion console as a link and QR code. Pairing gives the phone a device token, and the PC stores only its hash. The WebSocket must authenticate within 5 seconds, and the server checks `Origin` against `publicUrl`. A revoked or unknown token closes the socket with 4401, and the phone returns to the pairing screen.
-- **Command allowlist.** The JSON-RPC client can send only 13 allowlisted methods. `thread/shellCommand`, `command/exec*` and `process/*` are unreachable by construction.
+- **Reachability.** Every listener binds to `127.0.0.1`. In production a Cloudflare Tunnel makes only the phone server public at `https://trysulti.jaredomen.com`; Cloudflare provides the certificate and terminates HTTPS. With Tailscale Serve instead, only the owner's tailnet devices can reach it.
+- **Pairing.** A pairing code works once and expires after 10 minutes. It's shown in the companion console as a link and QR code, or printed by `npm run pair`; a companion running in the background never logs codes. Failed attempts are limited to 5 per minute per visitor (Cloudflare's `CF-Connecting-IP`). Pairing gives the phone a device token, and the PC stores only its hash. The WebSocket must authenticate within 5 seconds, and the server checks `Origin` against `publicUrl`. A revoked or unknown token closes the socket with 4401, including an open one, and the phone returns to the pairing screen.
+- **Command allowlist.** The JSON-RPC client can send only 15 allowlisted methods. `thread/shellCommand`, `command/exec*` and `process/*` are unreachable by construction.
 - **Approvals.** These arrive as cards and are answered only by a tap on Approve or Decline. The router maps "approve" and "yes do it" to *show approvals*, never to an approval.
-- **Audio URLs.** They're HMAC-signed and expire after 10 minutes. HTML is `no-store`, and the CSP allows only same-origin scripts.
+- **Audio URLs.** They're HMAC-signed and expire after 10 minutes. HTML is `no-store`, the CSP allows only same-origin scripts, and HSTS is sent when `publicUrl` is HTTPS.
 - **Unlisted sessions.** A terminal folder that isn't in `sessions.json` shows up as an unlisted session. Sulti can read its answers but never sends it prompts.
 
 ## Shared mode
