@@ -7,6 +7,10 @@
   run-companion.ps1 hidden at logon, as you (so TTS and "copy to PC" reach
   your desktop). The runner restarts the companion if it exits.
 
+  If %APPDATA%\sulti\tunnel-token exists (your Cloudflare Tunnel token), it also
+  registers "Sulti tunnel", which keeps cloudflared connected the same way. No
+  administrator rights or Windows service needed.
+
   Build first (npm run build). Run again to update; -Uninstall removes it.
 
 .EXAMPLE
@@ -20,12 +24,15 @@
 param([switch]$Uninstall, [switch]$DryRun, [string]$NodePath)
 $ErrorActionPreference = 'Stop'
 $TaskName = 'Sulti companion'
+$TunnelTask = 'Sulti tunnel'
 
 if ($Uninstall) {
-  if ($DryRun) { Write-Host "Would remove the scheduled task '$TaskName'."; exit 0 }
-  Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-  Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-  Write-Host "Removed '$TaskName'. A companion that is still running stops at your next sign-out, or end it in Task Manager."
+  if ($DryRun) { Write-Host "Would remove the scheduled tasks '$TaskName' and '$TunnelTask'."; exit 0 }
+  foreach ($t in @($TaskName, $TunnelTask)) {
+    Stop-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue
+  }
+  Write-Host "Removed '$TaskName' and '$TunnelTask'."
   exit 0
 }
 
@@ -41,19 +48,30 @@ $runner = Join-Path $PSScriptRoot 'run-companion.ps1'
 $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $arguments = "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$runner`" -Node `"$node`""
 $user = "$env:USERDOMAIN\$env:USERNAME"
+$dataDir = if ($env:SULTI_DATA_DIR) { $env:SULTI_DATA_DIR } else { Join-Path $env:APPDATA 'sulti' }
+$tunnel = $null
+if (Test-Path -LiteralPath (Join-Path $dataDir 'tunnel-token')) {
+  $cf = (Get-Command cloudflared.exe -ErrorAction Stop).Source
+  $tunnel = "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$(Join-Path $PSScriptRoot 'run-tunnel.ps1')`" -Cloudflared `"$cf`""
+}
 
 if ($DryRun) {
   Write-Host "Task:    $TaskName (at logon of $user)"
   Write-Host "Runs:    $ps $arguments"
+  if ($tunnel) { Write-Host "Task:    $TunnelTask"; Write-Host "Runs:    $ps $tunnel" } else { Write-Host "No tunnel-token file, so no tunnel task." }
   exit 0
 }
 
-$action = New-ScheduledTaskAction -Execute $ps -Argument $arguments -WorkingDirectory $repo
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
-Start-ScheduledTask -TaskName $TaskName
-Write-Host "Installed and started '$TaskName'. Log: $env:APPDATA\sulti\companion.log"
+$tasks = @{ $TaskName = $arguments }
+if ($tunnel) { $tasks[$TunnelTask] = $tunnel }
+foreach ($name in $tasks.Keys) {
+  $action = New-ScheduledTaskAction -Execute $ps -Argument $tasks[$name] -WorkingDirectory $repo
+  Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+  Start-ScheduledTask -TaskName $name
+  Write-Host "Installed and started '$name'."
+}
+Write-Host "Logs: $dataDir\companion.log$(if ($tunnel) { ' and tunnel.log' })"
 Write-Host 'Check it with: Invoke-RestMethod http://127.0.0.1:7417/api/health'
-

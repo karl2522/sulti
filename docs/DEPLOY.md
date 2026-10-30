@@ -4,8 +4,8 @@ Production Sulti is your PC plus a Cloudflare Tunnel. The companion keeps runnin
 
 ```mermaid
 flowchart LR
-  iPhone -->|"HTTPS / WSS"| CF["Cloudflare edge<br/>trysulti.jaredomen.com"]
-  CF -->|"outbound tunnel"| CD["cloudflared<br/>(Windows service)"]
+  iPhone -->|"HTTPS / WSS"| CF["Cloudflare edge<br/>trysulti.jaredomen.com<br/>(Cloudflare for SaaS)"]
+  CF -->|"outbound tunnel"| CD["cloudflared<br/>(starts at logon)"]
   CD -->|"http://127.0.0.1:7417"| C["Sulti companion<br/>(starts at logon)"]
   C --> Codex["codex app-server"]
 ```
@@ -25,30 +25,27 @@ npm run e2e:live   # real Codex through a temporary Cloudflare tunnel, 2 short t
 
 All four must pass. `e2e:live` uses a throwaway data folder, so your own sessions, phones and chats are untouched.
 
-## 1. Move jaredomen.com's DNS to Cloudflare (one time)
+## 1. How the address reaches your PC
 
-A tunnel hostname only works when the domain's DNS is on Cloudflare. Today `jaredomen.com` uses Vercel's nameservers (`ns1.vercel-dns.com`), and a wildcard record sends every subdomain, including `trysulti`, to Vercel. Moving DNS is free and keeps the portfolio on Vercel; only the DNS host changes.
+`jaredomen.com`'s DNS stays on Vercel, so your portfolio, its subdomains, the ChatGPT sites and email are untouched. Cloudflare reaches your PC through a domain that's already on your Cloudflare account, and serves `trysulti.jaredomen.com` with **Cloudflare for SaaS** (100 custom hostnames are free on every plan):
 
-1. In the Cloudflare dashboard, **Add a domain**, enter `jaredomen.com`, pick the **Free** plan.
-2. Cloudflare imports the existing records. Make sure the apex (`jaredomen.com`) and `www` records point at Vercel: open the domain in Vercel's **Domains** settings and use the A and CNAME values Vercel shows for a domain on external DNS. Set those records to **DNS only** (grey cloud), which is what Vercel recommends so it keeps issuing its own certificates. Keep the domain added in Vercel.
-3. Delete the imported wildcard (`*`) record unless you use other subdomains on Vercel. It isn't needed for Sulti either way, because a specific `trysulti` record overrides it.
-4. At the registrar where you bought `jaredomen.com`, replace the two Vercel nameservers with the two Cloudflare nameservers shown in the dashboard.
-5. Wait for Cloudflare to mark the domain **Active** (minutes to a few hours), then open https://jaredomen.com to check the portfolio still loads.
+| Piece | Where | Value |
+|---|---|---|
+| Tunnel `sulti` | Cloudflare account | Routes `sulti-origin.bizello.app` and `trysulti.jaredomen.com` to `http://127.0.0.1:7417` |
+| `sulti-origin.bizello.app` | Cloudflare DNS (`bizello.app`) | Proxied CNAME to the tunnel; the SaaS **fallback origin** |
+| Custom hostname `trysulti.jaredomen.com` | Cloudflare for SaaS on `bizello.app` | Cloudflare issues its certificate |
+| `trysulti` CNAME | Vercel DNS (`jaredomen.com`) | `sulti-origin.bizello.app` |
+| `_cf-custom-hostname.trysulti` TXT | Vercel DNS | The ownership value Cloudflare shows for the custom hostname |
 
-## 2. Create the tunnel
+One-time setup in the Cloudflare dashboard: open `bizello.app`, **SSL/TLS**, **Custom Hostnames**, **Enable Cloudflare for SaaS**. The rest (tunnel, records, fallback origin, custom hostname) can be done through the API or dashboard.
 
-These steps follow Cloudflare's [dashboard tunnel guide](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/). The dashboard labels move now and then; the guide has the current ones.
+The alternative is moving `jaredomen.com`'s nameservers to Cloudflare and publishing the tunnel there directly. That works too, but every Vercel subdomain, the ChatGPT site records and the Resend email records would have to be copied over first.
 
-1. Cloudflare dashboard, **Networking**, **Tunnels**, **Create a tunnel**, name it `sulti`.
-2. Choose Windows. Copy the install command it shows and run it in an **administrator** PowerShell. It installs `cloudflared` as a Windows service that starts with Windows and restarts itself:
+## 2. Run the tunnel on the PC
 
-   ```powershell
-   cloudflared service install <TOKEN-FROM-THE-DASHBOARD>
-   ```
+Save the tunnel's token (dashboard: the tunnel, **Configure**, the install command's token) to `%APPDATA%\sulti\tunnel-token`. The token is a secret; keep it out of the repo and chats. Step 5 then runs `cloudflared` at logon for you, with no administrator rights. Check the tunnel shows **Healthy** in the dashboard and that `https://sulti-origin.bizello.app/api/health` answers. If it stays down, the PC must be able to reach Cloudflare on outbound port 7844.
 
-   The token is a secret. Don't paste it into the repo or a chat.
-3. Open the tunnel, **Routes**, **Add route**, **Published application**: hostname `trysulti.jaredomen.com`, service URL `http://127.0.0.1:7417`. Cloudflare creates the DNS record for you.
-4. Check `sc query cloudflared` shows **RUNNING**, and the tunnel shows **Healthy** in the dashboard. If it stays down, the PC must be able to reach Cloudflare on outbound port 7844.
+If you prefer a Windows service that runs before logon, run `cloudflared service install <TOKEN>` in an administrator PowerShell instead, and delete the `tunnel-token` file so the startup task doesn't start a second copy.
 
 ## 3. Cloudflare settings for this hostname
 
@@ -70,14 +67,14 @@ Create or edit `%APPDATA%\sulti\config.json` (see `apps/companion/config.example
 
 The phone's origin must match `publicUrl` exactly, or the companion refuses the WebSocket and pairing.
 
-## 5. Start the companion at logon
+## 5. Start Sulti at logon
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\production\install-startup.ps1 -DryRun   # preview
 powershell -ExecutionPolicy Bypass -File scripts\production\install-startup.ps1
 ```
 
-This registers a scheduled task, **Sulti companion**, that runs hidden as you (so PC voice and "copy to PC" reach your desktop) and restarts the companion within 5 seconds if it exits. Output goes to `%APPDATA%\sulti\companion.log`, and the previous run is kept as `companion.log.old`. In the background the companion never writes pairing codes to the log.
+This registers two scheduled tasks that run hidden as you and restart within 5 seconds if they exit: **Sulti companion** (as you, so PC voice and "copy to PC" reach your desktop) and, when the token file exists, **Sulti tunnel**. The tunnel logs to `%APPDATA%\sulti\tunnel.log`. Output goes to `%APPDATA%\sulti\companion.log`, and the previous run is kept as `companion.log.old`. In the background the companion never writes pairing codes to the log.
 
 ## 6. Pair the iPhone
 
@@ -98,13 +95,13 @@ Open the link on the iPhone in Safari, check the code matches, tap **Connect**. 
 | Task | How |
 |---|---|
 | Logs | `%APPDATA%\sulti\companion.log`, and `hook-errors.log` for the Stop hook |
-| Restart | `Stop-ScheduledTask 'Sulti companion'; Start-ScheduledTask 'Sulti companion'` |
+| Restart | `Stop-ScheduledTask 'Sulti companion'; Start-ScheduledTask 'Sulti companion'` (same for `'Sulti tunnel'`) |
 | Update | `git pull; npm ci; npm run build`, run the tests from step 0, then restart |
 | Roll back | `git checkout <previous commit>; npm ci; npm run build`, then restart |
 | Pair another phone | `npm run pair` |
 | Remove a phone | `npm run devices -- list`, then `npm run devices -- revoke <id>`. Its open connection closes within 30 seconds. |
-| Stop serving | Pause the tunnel in the dashboard, or `Stop-Service cloudflared` |
-| Uninstall | `install-startup.ps1 -Uninstall`, `cloudflared service uninstall`, delete the tunnel and its DNS record |
+| Stop serving | `Stop-ScheduledTask 'Sulti tunnel'`, or delete the custom hostname in Cloudflare |
+| Uninstall | `install-startup.ps1 -Uninstall`; delete the custom hostname, the tunnel and `sulti-origin` in Cloudflare; delete the two `trysulti` records in Vercel |
 
 ## What's public, and what protects it
 
@@ -116,3 +113,4 @@ Anyone can load the app shell and `/api/health`. Everything else needs a paired 
 - **Codex** is only ever sent prompts; Sulti can't run shell commands, and every approval needs a tap.
 
 Cloudflare terminates HTTPS, so your prompts and answers pass through Cloudflare's edge decrypted, as they would for any site behind Cloudflare. If you want traffic that only your own devices can see, Tailscale Serve (in the README) is the alternative. For a second lock in front of the whole site, you can add Cloudflare Access later; the Home Screen app then needs to sign in to Access as well.
+
