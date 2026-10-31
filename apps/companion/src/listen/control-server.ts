@@ -43,7 +43,7 @@ function pairPage(code: string, url: string): string {
 body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0f1012;color:#f2f2f2;font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
 main{width:min(420px,90vw);text-align:center}h1{font-size:26px;margin:0 0 6px}p{color:#a9abb0;margin:0 0 20px}
 .qr{background:#fff;border-radius:20px;padding:14px;width:min(300px,70vw);margin:0 auto 20px}.qr svg{display:block;width:100%;height:auto}
-.code{font:600 22px/1 ui-monospace,Consolas,monospace;letter-spacing:.08em;color:#f2f2f2}.small{font-size:14px}
+.code{font:600 22px/1 ui-monospace,Consolas,monospace;letter-spacing:.08em;color:#f2f2f2;white-space:nowrap}.small{font-size:14px}
 .done{font-size:64px;line-height:1;margin:30px 0 12px;color:#4ade80}a.btn{display:inline-block;background:#f2f2f2;color:#0f1012;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:600}
 </style></head><body><main id="m">
 <h1>Pair your iPhone</h1><p>Open the Camera on your iPhone and point it at this code, then tap the link that appears.</p>
