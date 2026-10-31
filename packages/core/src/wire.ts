@@ -80,6 +80,18 @@ export type ActivityItem = z.infer<typeof ActivityItem>;
 export const PlaybackAction = z.enum(["read", "again", "pause", "resume", "restart", "stop"]);
 export type PlaybackAction = z.infer<typeof PlaybackAction>;
 
+/** A new device asking to connect; a paired phone allows or denies it. */
+export const PairRequest = z.object({
+  requestId: id,
+  deviceName: z.string().max(60),
+  /** Two digits shown on both screens. */
+  match: z.string().max(4),
+  /** Country code from Cloudflare, when known. */
+  place: z.string().max(2).nullable(),
+  expiresAt: z.number(),
+});
+export type PairRequest = z.infer<typeof PairRequest>;
+
 /** Output of the intent router (packages/core/src/router.ts). */
 const intentMeta = { confidence: z.number().min(0).max(1), needsConfirm: z.boolean() };
 
@@ -144,6 +156,7 @@ export const PhoneMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("thread.list"), sessionId: id }),
   z.object({ type: z.literal("thread.attach"), sessionId: id, threadId: id }),
   z.object({ type: z.literal("thread.new"), sessionId: id }),
+  z.object({ type: z.literal("pair.respond"), requestId: id, accept: z.boolean() }),
 ]);
 export type PhoneMessage = z.infer<typeof PhoneMessage>;
 
@@ -188,6 +201,8 @@ export const CompanionMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("audio.url"), answerId: id, url: z.string() }),
   z.object({ type: z.literal("audio.failed"), answerId: id, message: z.string() }),
   z.object({ type: z.literal("toast"), level: z.enum(["info", "warn", "error"]), message: z.string() }),
+  PairRequest.extend({ type: z.literal("pair.request") }),
+  z.object({ type: z.literal("pair.resolved"), requestId: id }),
 ]);
 export type CompanionMessage = z.infer<typeof CompanionMessage>;
 

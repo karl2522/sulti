@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { get } from "node:http";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CompanionMessage } from "@sulti/core";
@@ -415,6 +416,46 @@ describe("pairing and WebSocket auth over the wire", () => {
     expect(ok.status).toBe(200);
     const again = await fetch(url, { method: "POST", headers: { Origin: "https://sulti.example" }, body: JSON.stringify({ code }) });
     expect(again.status).toBe(401);
+  });
+
+  it("a paired phone lets a new device in with a tap", async () => {
+    const { t, phone } = await setup();
+    const api = (path: string, body: unknown, origin = "https://sulti.example") =>
+      fetch(`http://127.0.0.1:${t.c.phone.port}/api/pair/${path}`, { method: "POST", headers: { Origin: origin, "cf-ipcountry": "PH" }, body: JSON.stringify(body) });
+    expect((await api("request", { deviceName: "iPad" }, "https://evil.example")).status).toBe(403);
+    const ask = (await (await api("request", { deviceName: "iPad" })).json()) as { requestId: string; secret: string; match: string; asked: number };
+    expect(ask.asked).toBe(1);
+    const shown = (await phone.waitFor("pair.request")) as Of<"pair.request">;
+    expect(shown).toMatchObject({ requestId: ask.requestId, deviceName: "iPad", match: ask.match, place: "PH" });
+    expect(JSON.stringify(shown)).not.toContain(ask.secret);
+    expect(await (await api("poll", { requestId: ask.requestId, secret: ask.secret })).json()).toEqual({ status: "pending" });
+    phone.send({ type: "pair.respond", requestId: ask.requestId, accept: true });
+    await phone.waitFor("pair.resolved");
+    const got = (await (await api("poll", { requestId: ask.requestId, secret: ask.secret })).json()) as { status: string; deviceToken: string };
+    expect(got.status).toBe("approved");
+    const ipad = await Phone.open(t.c.phone.port);
+    phones.push(ipad);
+    ipad.send({ type: "auth", deviceToken: got.deviceToken });
+    await ipad.waitFor("auth.ok");
+  });
+
+  it("serves the pairing QR page only to a browser on this PC", async () => {
+    const t = await startTestCompanion();
+    running.push(t);
+    const base = `http://127.0.0.1:${t.c.control.port}`;
+    const page = await fetch(`${base}/pair`, { headers: { "Sec-Fetch-Site": "none" } });
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).toContain("<svg");
+    const code = /status\?code=([A-Z0-9]+)/.exec(html)![1]!;
+    const status = async () => ((await (await fetch(`${base}/pair/status?code=${code}`)).json()) as { pending: boolean }).pending;
+    expect(await status()).toBe(true);
+    expect(t.c.pairing.exchange(code, "iPhone").ok).toBe(true);
+    expect(await status()).toBe(false);
+    // Another website can't make the browser create codes, and a rebound hostname can't read them.
+    expect((await fetch(`${base}/pair`, { headers: { "Sec-Fetch-Site": "cross-site" } })).status).toBe(403);
+    const rebound = await new Promise<number>((done) => get({ port: t.c.control.port, host: "127.0.0.1", path: "/pair", headers: { Host: "evil.example" } }, (res) => (res.resume(), done(res.statusCode!))));
+    expect(rebound).toBe(403);
   });
 
   it("drops a revoked device on its next connection", async () => {

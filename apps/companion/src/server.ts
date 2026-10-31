@@ -115,6 +115,24 @@ export function startPhoneServer(d: PhoneServerDeps, port: number): Promise<Runn
   let actualPort = port;
   const origins = () => allowedOrigins(d.publicUrl(), actualPort, d.dev);
   const originOk = (req: IncomingMessage) => typeof req.headers.origin === "string" && origins().has(req.headers.origin);
+  const header = (req: IncomingMessage, name: string) => {
+    const v = req.headers[name];
+    return Array.isArray(v) ? v[0] : v;
+  };
+  // Behind Cloudflare every request comes from cloudflared on loopback; the visitor is in this header.
+  const clientOf = (req: IncomingMessage) => header(req, "cf-connecting-ip") ?? req.socket.remoteAddress ?? "local";
+  /** Parsed JSON body for a same-origin POST, or null after replying with the error. */
+  const postBody = async (req: IncomingMessage, res: ServerResponse): Promise<Record<string, unknown> | null> => {
+    if (req.method !== "POST") return sendJson(res, 405, { error: "POST only" }), null;
+    if (!originOk(req)) return sendJson(res, 403, { error: "Origin not allowed" }), null;
+    try {
+      const body: unknown = JSON.parse(await readBody(req));
+      if (body && typeof body === "object") return body as Record<string, unknown>;
+    } catch {
+      // fall through
+    }
+    return sendJson(res, 400, { error: "Invalid JSON" }), null;
+  };
 
   const server = createServer(async (req, res) => {
     securityHeaders(res, !!d.publicUrl()?.startsWith("https:"));
@@ -122,20 +140,30 @@ export function startPhoneServer(d: PhoneServerDeps, port: number): Promise<Runn
     try {
       if (url.pathname === "/api/health" && req.method === "GET") return sendJson(res, 200, { ok: true, app: APP_NAME, version: APP_VERSION });
       if (url.pathname === "/api/pair") {
-        if (req.method !== "POST") return sendJson(res, 405, { error: "POST only" });
-        if (!originOk(req)) return sendJson(res, 403, { error: "Origin not allowed" });
-        let body: { code?: unknown; deviceName?: unknown } = {};
-        try {
-          body = JSON.parse(await readBody(req)) as typeof body;
-        } catch {
-          return sendJson(res, 400, { error: "Invalid JSON" });
-        }
-        // Behind Cloudflare every request comes from cloudflared on loopback; the visitor is in this header.
-        const ip = req.headers["cf-connecting-ip"];
-        const out = d.pairing.exchange(body.code, body.deviceName, (Array.isArray(ip) ? ip[0] : ip) ?? req.socket.remoteAddress ?? "local");
+        const body = await postBody(req, res);
+        if (!body) return;
+        const out = d.pairing.exchange(body.code, body.deviceName, clientOf(req));
         if (!out.ok) return sendJson(res, out.status, { error: out.error });
         d.log?.(`paired new device ${out.deviceId}`);
         return sendJson(res, 200, { deviceId: out.deviceId, deviceToken: out.deviceToken });
+      }
+      // A new device asks the phones that are already paired to let it in.
+      if (url.pathname === "/api/pair/request") {
+        const body = await postBody(req, res);
+        if (!body) return;
+        const out = d.pairing.request(body.deviceName, clientOf(req), header(req, "cf-ipcountry") ?? null);
+        if (!out.ok) return sendJson(res, 429, { error: out.error });
+        const asked = d.hub.askToPair(out.info);
+        d.log?.(`pairing request ${out.info.requestId}, asked ${asked} phone(s)`);
+        return sendJson(res, 200, { ...out.info, secret: out.secret, asked });
+      }
+      if (url.pathname === "/api/pair/poll") {
+        const body = await postBody(req, res);
+        if (!body) return;
+        const out = d.pairing.poll(body.requestId, body.secret, body.cancel === true);
+        if (out.status === "cancelled") d.hub.broadcast({ type: "pair.resolved", requestId: body.requestId as string });
+        if (out.status === "approved") d.log?.(`paired new device ${out.deviceId} (approved on a phone)`);
+        return sendJson(res, 200, out);
       }
       const audio = /^\/api\/answers\/([\w-]{1,100})\/audio$/.exec(url.pathname);
       if (audio) {

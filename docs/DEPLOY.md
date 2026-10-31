@@ -81,11 +81,11 @@ This registers two scheduled tasks that run hidden as you and restart within 5 s
 
 ## 6. Pair the iPhone
 
-```powershell
-npm run pair
-```
+Open the **Sulti pairing** shortcut that `install-startup.ps1` put on your desktop (or `http://127.0.0.1:7418/pair`). It shows a QR code that works once for 10 minutes and only opens on this PC. Point the iPhone Camera at it, tap the link, check the code matches, tap **Connect**. The page says "Phone connected".
 
-Open the link on the iPhone in Safari, check the code matches, tap **Connect**. Then **Share**, **Add to Home Screen**. iOS gives the Home Screen app its own storage, so run `npm run pair` again and pair it once more.
+Then **Share**, **Add to Home Screen**. iOS gives the Home Screen app its own storage, so it asks to connect again: tap **Ask to connect**, and on the phone you just paired in Safari tap **Allow** when it shows the same two digits. Every later phone or browser can join the same way.
+
+`npm run pair` still prints a link and a terminal QR code if you prefer.
 
 ## 7. Verify
 
@@ -101,7 +101,7 @@ Open the link on the iPhone in Safari, check the code matches, tap **Connect**. 
 | Restart | Run `install-startup.ps1` again, or `Stop-ScheduledTask 'Sulti companion'; Start-ScheduledTask 'Sulti companion'` (same for `'Sulti tunnel'`). Each runner replaces the previous copy when it starts. |
 | Update | `git pull; npm ci; npm run build`, run the tests from step 0, then restart |
 | Roll back | `git checkout <previous commit>; npm ci; npm run build`, then restart |
-| Pair another phone | `npm run pair` |
+| Pair another phone | **Ask to connect** on it, then **Allow** on a paired phone. Or the **Sulti pairing** desktop shortcut, or `npm run pair`. |
 | Remove a phone | `npm run devices -- list`, then `npm run devices -- revoke <id>`. Its open connection closes within 30 seconds. |
 | Stop serving | `install-startup.ps1 -Stop` (stopping the tasks alone leaves the processes running). Sulti starts again at the next logon. |
 | Uninstall | `install-startup.ps1 -Uninstall`; delete the custom hostname, the tunnel and `sulti-origin` in Cloudflare; delete the two `trysulti` records in Vercel |
@@ -110,7 +110,8 @@ Open the link on the iPhone in Safari, check the code matches, tap **Connect**. 
 
 Anyone can load the app shell and `/api/health`. Everything else needs a paired phone:
 
-- **Pairing** needs a 10-character one-time code from your PC that expires after 10 minutes. Wrong guesses are limited to 5 per minute per visitor, so a stranger can't lock you out.
+- **Pairing** needs a 10-character one-time code from your PC that expires after 10 minutes. Wrong guesses are limited to 5 per minute per visitor, so a stranger can't lock you out. The QR page that shows the code is served only on the PC's loopback port, which the tunnel never exposes.
+- **Ask to connect** only lets a device in after a tap on **Allow** on a phone that's already paired. Requests expire after 2 minutes, at most 3 can wait per visitor, and the new device collects its token once with a secret only it holds.
 - **The WebSocket** needs a device token, must authenticate within 5 seconds, and must come from `publicUrl`'s origin.
 - **Audio links** are HMAC-signed and expire after 10 minutes.
 - **Codex** is only ever sent prompts; Sulti can't run shell commands, and every approval needs a tap.

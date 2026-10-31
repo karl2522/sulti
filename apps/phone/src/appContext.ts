@@ -7,6 +7,7 @@ import type { Player } from "./usePlayer.js";
 /** The one bottom sheet that can be open at a time. */
 export type SheetSpec =
   | { kind: "approval"; requestId?: string }
+  | { kind: "pairRequest"; requestId: string }
   | { kind: "settings" }
   | { kind: "pickSession"; title: string; onPick: (sessionId: string) => void }
   | { kind: "skills"; sessionId: string; onPick: (skill: string) => void }

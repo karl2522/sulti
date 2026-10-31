@@ -6,6 +6,7 @@ import { Icon } from "../ui/icons.js";
 import { Avatar } from "../ui/parts.js";
 import { Sheet, useSheetClose } from "../ui/Sheet.js";
 import { ApprovalSheet } from "./Approval.js";
+import { PairRequestSheet } from "./PairRequest.js";
 import { SettingsSheet } from "./Settings.js";
 
 const STATUS = { idle: "Idle", working: "Working", waitingApproval: "Needs approval", error: "Last turn failed" } as const;
@@ -154,6 +155,7 @@ function Copy({ answer }: { answer: Answer }) {
 
 const LABEL: Record<SheetSpec["kind"], string> = {
   approval: "Approval",
+  pairRequest: "New device",
   settings: "Settings",
   pickSession: "Choose a session",
   skills: "Skills",
@@ -169,6 +171,7 @@ export function SheetHost() {
   return (
     <Sheet key={sheet.kind + ("requestId" in sheet ? sheet.requestId : "")} label={LABEL[sheet.kind]} onClose={closeSheet}>
       {sheet.kind === "approval" && <ApprovalSheet requestId={sheet.requestId} />}
+      {sheet.kind === "pairRequest" && <PairRequestSheet requestId={sheet.requestId} />}
       {sheet.kind === "settings" && <SettingsSheet />}
       {sheet.kind === "pickSession" && <PickSession title={sheet.title} onPick={sheet.onPick} />}
       {sheet.kind === "skills" && <Skills sessionId={sheet.sessionId} onPick={sheet.onPick} />}

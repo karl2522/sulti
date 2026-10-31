@@ -69,6 +69,7 @@ async function pair(): Promise<void> {
     process.exit(1);
   }
   printPairing(((await res.json()) as { url: string }).url);
+  console.log(`\nA bigger QR code: open http://127.0.0.1:${config.hookPort}/pair on this PC (the "Sulti pairing" desktop shortcut).`);
 }
 
 async function main(): Promise<void> {

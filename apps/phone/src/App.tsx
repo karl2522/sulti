@@ -109,6 +109,15 @@ function Main({ device, onForget }: { device: Device; onForget: () => void }) {
   const openSheet = useCallback((s: SheetSpec) => setSheet(s), []);
   const closeSheet = useCallback(() => setSheet(null), []);
 
+  // A new device asking to connect takes the next free sheet, once; someone is waiting on it.
+  const askedPair = useRef(new Set<string>());
+  useEffect(() => {
+    const r = state.pairRequests.find((x) => !askedPair.current.has(x.requestId) && x.expiresAt > Date.now());
+    if (sheet || !r) return;
+    askedPair.current.add(r.requestId);
+    setSheet({ kind: "pairRequest", requestId: r.requestId });
+  }, [sheet, state.pairRequests]);
+
   // Voice commands that act on the phone itself.
   const runLocal = (action: Exclude<AppAction, { type: "switchSession" }>) => {
     const s = stateRef.current;
@@ -154,6 +163,9 @@ function Main({ device, onForget }: { device: Device; onForget: () => void }) {
         if (backlog) return;
         if (!sheetRef.current) return openSheet({ kind: "approval", requestId: m.requestId });
         return notify("warn", sessionName(stateRef.current, m.sessionId) + " needs your approval.");
+      case "pair.request":
+        if (sheetRef.current) notify("warn", "A new " + m.deviceName + " wants to connect.");
+        return;
       case "route.result": {
         const plan = planRoute(m);
         const confirm = (onAccept?: () => void) =>

@@ -7,6 +7,9 @@
   run-companion.ps1 hidden at logon, as you (so TTS and "copy to PC" reach
   your desktop). The runner restarts the companion if it exits.
 
+  It also puts a "Sulti pairing" shortcut on your desktop. It opens a QR code
+  that pairs a phone, and only works on this PC.
+
   If %APPDATA%\sulti\tunnel-token exists (your Cloudflare Tunnel token), it also
   registers "Sulti tunnel", which keeps cloudflared connected the same way. No
   administrator rights or Windows service needed.
@@ -26,6 +29,7 @@ param([switch]$Uninstall, [switch]$Stop, [switch]$DryRun, [string]$NodePath)
 $ErrorActionPreference = 'Stop'
 $TaskName = 'Sulti companion'
 $TunnelTask = 'Sulti tunnel'
+$Shortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Sulti pairing.url'
 . (Join-Path $PSScriptRoot 'stop.ps1')
 
 if ($Uninstall -or $Stop) {
@@ -34,6 +38,7 @@ if ($Uninstall -or $Stop) {
     Stop-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue
     if ($Uninstall) { Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue }
   }
+  if ($Uninstall) { Remove-Item -LiteralPath $Shortcut -ErrorAction SilentlyContinue }
   Stop-SultiProcesses all
   Write-Host $(if ($Uninstall) { "Stopped Sulti and removed '$TaskName' and '$TunnelTask'." } else { 'Stopped Sulti. It starts again at your next logon, or run this script without -Stop.' })
   exit 0
@@ -81,5 +86,11 @@ foreach ($name in $tasks.Keys) {
   Start-ScheduledTask -TaskName $name
   Write-Host "Installed and started '$name'."
 }
+$hookPort = 7418
+$configFile = Join-Path $dataDir 'config.json'
+if (Test-Path -LiteralPath $configFile) { $c = Get-Content -LiteralPath $configFile -Raw | ConvertFrom-Json; if ($c.hookPort) { $hookPort = $c.hookPort } }
+if ($env:SULTI_HOOK_PORT) { $hookPort = $env:SULTI_HOOK_PORT }
+Set-Content -LiteralPath $Shortcut -Encoding ASCII -Value "[InternetShortcut]`r`nURL=http://127.0.0.1:$hookPort/pair"
+Write-Host "Desktop shortcut 'Sulti pairing' opens a QR code to pair a phone."
 Write-Host "Logs: $dataDir\companion.log$(if ($tunnel) { ' and tunnel.log' })"
 Write-Host 'Check it with: Invoke-RestMethod http://127.0.0.1:7417/api/health'

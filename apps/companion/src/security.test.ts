@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { PAIR_CODE_TTL_MS, Pairing } from "./pairing.js";
+import { PAIR_CODE_TTL_MS, PAIR_REQUEST_TTL_MS, Pairing } from "./pairing.js";
 import { AUDIO_URL_TTL_MS, signedAudioPath, verifyAudioSignature } from "./signing.js";
 import { readJson } from "./store.js";
 
@@ -72,6 +72,56 @@ describe("pairing and auth", () => {
     const b = running.exchange(running.createCode(), "b"); // a later pairing saves the list
     expect(b.ok).toBe(true);
     expect(new Pairing(dir).list().map((d) => d.name)).toEqual(["b"]);
+  });
+});
+
+describe("pairing by approval from a paired phone", () => {
+  const ask = (p: Pairing, client = "1.2.3.4") => {
+    const r = p.request("iPhone", client, "PH");
+    if (!r.ok) throw new Error(r.error);
+    return r;
+  };
+
+  it("hands the token over once, only after an Allow, and only with the secret", () => {
+    const dir = tmp();
+    const p = new Pairing(dir);
+    const { info, secret } = ask(p);
+    expect(info.match).toMatch(/^\d{2}$/);
+    expect(p.pendingRequests().map((x) => x.requestId)).toEqual([info.requestId]);
+    expect(p.poll(info.requestId, secret)).toEqual({ status: "pending" });
+    expect(p.list()).toHaveLength(0); // nothing issued before the tap
+    expect(p.respond(info.requestId, true)).toBe(true);
+    expect(p.respond(info.requestId, false)).toBe(false); // already answered
+    expect(p.poll(info.requestId, "wrong-secret")).toEqual({ status: "expired" });
+    const got = p.poll(info.requestId, secret);
+    if (got.status !== "approved") throw new Error("not approved");
+    expect(p.verify(got.deviceToken)?.name).toBe("iPhone");
+    expect(JSON.stringify(readJson(join(dir, "devices.json"), []))).not.toContain(got.deviceToken);
+    expect(p.poll(info.requestId, secret)).toEqual({ status: "expired" }); // single handover
+  });
+
+  it("deny, cancel and expiry issue nothing", () => {
+    let now = 1_000_000;
+    const p = new Pairing(tmp(), () => now);
+    const denied = ask(p);
+    p.respond(denied.info.requestId, false);
+    expect(p.poll(denied.info.requestId, denied.secret)).toEqual({ status: "denied" });
+    const cancelled = ask(p);
+    expect(p.poll(cancelled.info.requestId, cancelled.secret, true)).toEqual({ status: "cancelled" });
+    expect(p.respond(cancelled.info.requestId, true)).toBe(false);
+    const late = ask(p);
+    now += PAIR_REQUEST_TTL_MS + 1;
+    expect(p.respond(late.info.requestId, true)).toBe(false);
+    expect(p.poll(late.info.requestId, late.secret)).toEqual({ status: "expired" });
+    expect(p.list()).toHaveLength(0);
+  });
+
+  it("limits pending requests per client and in total", () => {
+    const p = new Pairing(tmp());
+    for (let i = 0; i < 3; i++) ask(p, "9.9.9.9");
+    expect(p.request("x", "9.9.9.9", null).ok).toBe(false);
+    for (let i = 0; i < 17; i++) ask(p, "10.0.0." + i);
+    expect(p.request("x", "8.8.8.8", null).ok).toBe(false);
   });
 });
 

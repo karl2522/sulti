@@ -96,7 +96,7 @@ await startCompanion();
 
 await step("pair from link", async () => {
   await page.goto(base + "/pair#code=" + (await newCode()));
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await page.getByRole("heading", { name: "Sessions", exact: true }).waitFor({ timeout: 10000 });
   expect((await page.locator("li.row").count()) === 3, "expected 3 sessions");
   await page.locator(".conn-pill.conn-open").waitFor();
@@ -302,22 +302,49 @@ await step("revoke drops the phone", async () => {
 await step("pair with typed code", async () => {
   const code = await newCode();
   await page.goto(base + "/");
+  await page.getByRole("button", { name: "Have a pairing code?" }).click();
   await page.getByLabel("Pairing code").fill(code.slice(0, 5) + "-" + code.slice(5));
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await page.getByRole("heading", { name: "Sessions", exact: true }).waitFor({ timeout: 10000 });
 });
 
 await step("wrong pairing code", async () => {
   await page.evaluate(() => localStorage.removeItem("sulti.device"));
   await page.goto(base + "/");
+  await page.getByRole("button", { name: "Have a pairing code?" }).click();
   await page.getByLabel("Pairing code").fill("WRONGCODE9");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await page.getByRole("alert").waitFor();
   notes.push("wrong code: " + (await page.getByRole("alert").innerText()));
   const code = await newCode();
   await page.getByLabel("Pairing code").fill(code);
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await page.getByRole("heading", { name: "Sessions", exact: true }).waitFor({ timeout: 10000 });
+});
+
+await step("approve a new phone and the PC QR page", async () => {
+  const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  try {
+    // The desktop shortcut's page: a QR code that notices when its code is used.
+    const qr = await ctx2.newPage();
+    await qr.goto("http://127.0.0.1:" + HOOK + "/pair");
+    await qr.locator(".qr svg").waitFor();
+    const code = /status\?code=([A-Z0-9]+)/.exec(await qr.content())[1];
+    const used = await fetch(base + "/api/pair", { method: "POST", headers: { Origin: base }, body: JSON.stringify({ code }) });
+    expect(used.ok, "QR code exchange " + used.status);
+    await qr.getByRole("heading", { name: "Phone connected" }).waitFor({ timeout: 6000 });
+    // A new phone asks; the paired one allows it with a tap.
+    const p2 = await ctx2.newPage();
+    await p2.goto(base + "/");
+    await p2.getByRole("button", { name: "Ask to connect" }).click();
+    const match = await p2.getByLabel(/^Match code/).innerText();
+    await page.getByRole("heading", { name: /^Let a new .* connect\?$/ }).waitFor({ timeout: 8000 });
+    expect((await page.getByLabel("Match code " + match).count()) === 1, "match code differs");
+    await page.getByRole("button", { name: "Allow", exact: true }).click();
+    await p2.getByRole("heading", { name: "Sessions", exact: true }).waitFor({ timeout: 10000 });
+  } finally {
+    await ctx2.close();
+  }
 });
 
 await step("settings and forget", async () => {

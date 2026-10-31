@@ -4,6 +4,7 @@ import type { V2 } from "@sulti/protocol";
 import { upsertActivity } from "./activity.js";
 import { MAX_ANSWERS, type AnswerStore } from "./answers.js";
 import { CodexBridge, type PendingApproval } from "./appserver.js";
+import type { Pairing, PairRequestInfo } from "./pairing.js";
 import type { Session, SessionRegistry } from "./sessions.js";
 import { signedAudioPath } from "./signing.js";
 import type { ThreadStore } from "./store.js";
@@ -18,6 +19,7 @@ export interface HubDeps {
   registry: SessionRegistry;
   answers: AnswerStore;
   threads: ThreadStore;
+  pairing: Pairing;
   signingSecret: string;
   /** Renders speech text to a WAV at outFile. */
   renderAudio: (speechText: string, outFile: string) => Promise<void>;
@@ -81,6 +83,12 @@ export class Hub {
     for (const c of this.clients) c.send(msg);
   }
 
+  /** Ask every open phone to let a new device in. Returns how many phones were asked. */
+  askToPair(info: PairRequestInfo): number {
+    this.broadcast({ type: "pair.request", ...info });
+    return this.clients.size;
+  }
+
   /** Initial state for a freshly authenticated phone. */
   async welcome(c: PhoneClient): Promise<void> {
     c.send(this.sessionsMsg());
@@ -89,6 +97,7 @@ export class Hub {
     const backlog = new Set([...this.d.answers.recent(20), ...latest.values()]);
     for (const a of [...backlog].sort((x, y) => x.createdAt - y.createdAt)) c.send({ type: "answer", ...a });
     for (const a of this.bridge.pendingApprovals()) c.send(this.approvalMsg(a));
+    for (const p of this.d.pairing.pendingRequests()) c.send({ type: "pair.request", ...p });
     for (const [sessionId, items] of this.activity) c.send({ type: "activity", sessionId, items });
     if (this.activeSessionId) await this.sendSessionDetails(c, this.activeSessionId);
   }
@@ -199,6 +208,14 @@ export class Hub {
       }
       case "thread.new":
         return this.newChat(c, this.promptable(msg.sessionId));
+      case "pair.respond": {
+        // Like approvals, only an explicit tap on a paired phone lets a new device in.
+        const ok = this.d.pairing.respond(msg.requestId, msg.accept);
+        this.broadcast({ type: "pair.resolved", requestId: msg.requestId });
+        if (ok) this.d.log?.(`device ${c.deviceId} ${msg.accept ? "allowed" : "denied"} pairing request ${msg.requestId}`);
+        if (!ok) return c.send({ type: "toast", level: "warn", message: "That request expired. Ask again on the new device." });
+        return c.send({ type: "toast", level: "info", message: msg.accept ? "Allowed. The new device is connecting." : "Denied." });
+      }
     }
   }
 

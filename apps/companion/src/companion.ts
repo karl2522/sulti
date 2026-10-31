@@ -58,6 +58,7 @@ export async function startCompanion(config: Config, o: CompanionOverrides = {})
     registry,
     answers,
     threads,
+    pairing,
     signingSecret: secrets.signingSecret,
     renderAudio: o.renderAudio ?? ((text, out) => renderWav(text, out, config.tts)),
     copyToPc: o.copyToPc ?? copyToPcClipboard,
@@ -78,7 +79,10 @@ export async function startCompanion(config: Config, o: CompanionOverrides = {})
     const code = pairing.createCode();
     return { code, url: `${publicUrl()}/pair#code=${code}` };
   };
-  const control = await startControlServer({ hookSecret: secrets.hookSecret, onStop: (s) => hub.onHookAnswer(s), newPairing, log }, config.hookPort);
+  const control = await startControlServer(
+    { hookSecret: secrets.hookSecret, onStop: (s) => hub.onHookAnswer(s), newPairing, pairingPending: (code) => pairing.isPending(code), log },
+    config.hookPort,
+  );
   void conn.start();
 
   return {

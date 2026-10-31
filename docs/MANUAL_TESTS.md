@@ -6,8 +6,9 @@ Steps marked *(live turn)* use your Codex plan.
 
 ## 1. Pair
 
-- [ ] Run `npm run pair` on the PC and open the link in Safari on the iPhone. The code on the phone matches the PC. Tap **Connect**; the Sessions screen shows your PC's name with a green dot.
-- [ ] **Share**, **Add to Home Screen**, open Sulti from the icon. It opens full screen and asks to pair again, because Home Screen apps have their own storage. Run `npm run pair`, type the code (with or without the dash), tap **Connect**.
+- [ ] Open the **Sulti pairing** desktop shortcut on the PC and scan its QR code with the iPhone Camera. The code on the phone matches the PC. Tap **Connect**; the Sessions screen shows your PC's name with a green dot, and the PC page says "Phone connected".
+- [ ] **Share**, **Add to Home Screen**, open Sulti from the icon. It opens full screen and asks to connect again, because Home Screen apps have their own storage. Tap **Ask to connect**, switch to Safari, and tap **Allow** on the sheet that shows the same two digits. The Home Screen app opens Sessions.
+- [ ] **Have a pairing code?** still works with a code from `npm run pair` (with or without the dash).
 - [ ] `npm run devices -- list` shows both.
 
 ## 2. Listen

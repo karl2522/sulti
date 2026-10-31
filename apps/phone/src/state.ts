@@ -1,4 +1,4 @@
-import type { ActivityItem, Answer, CompanionMessage, CompanionMessageOf, Goal, SessionInfo, SkillInfo, ThreadSummary } from "@sulti/core";
+import type { ActivityItem, Answer, CompanionMessage, CompanionMessageOf, Goal, PairRequest, SessionInfo, SkillInfo, ThreadSummary } from "@sulti/core";
 import type { ConnStatus } from "./connection.js";
 
 export type ApprovalCard = CompanionMessageOf<"approval.request"> & { sent?: boolean; receivedAt: number };
@@ -22,6 +22,8 @@ export interface AppState {
   /** Newest first. */
   answers: Answer[];
   approvals: ApprovalCard[];
+  /** New devices asking to connect. */
+  pairRequests: PairRequest[];
   skills: Record<string, SkillInfo[]>;
   goals: Record<string, Goal | null>;
   threads: Record<string, ThreadSummary[]>;
@@ -41,6 +43,7 @@ export const initialState: AppState = {
   activeSessionId: null,
   answers: [],
   approvals: [],
+  pairRequests: [],
   skills: {},
   goals: {},
   threads: {},
@@ -88,7 +91,7 @@ function onMessage(s: AppState, m: CompanionMessage): AppState {
     case "auth.ok":
       // The companion re-sends what is still pending right after this; anything
       // resolved while we were away must not linger.
-      return { ...s, deviceId: m.deviceId, version: m.version, host: m.host ?? null, approvals: [], activity: {} };
+      return { ...s, deviceId: m.deviceId, version: m.version, host: m.host ?? null, approvals: [], pairRequests: [], activity: {} };
     case "sessions":
       return { ...s, loaded: true, sessions: m.sessions, activeSessionId: m.activeSessionId };
     case "session.status":
@@ -110,6 +113,12 @@ function onMessage(s: AppState, m: CompanionMessage): AppState {
       return { ...s, approvals: [...s.approvals, { ...m, receivedAt: Date.now() }] };
     case "approval.resolved":
       return { ...s, approvals: s.approvals.filter((x) => x.requestId !== m.requestId) };
+    case "pair.request": {
+      const { type: _type, ...req } = m;
+      return s.pairRequests.some((x) => x.requestId === req.requestId) ? s : { ...s, pairRequests: [...s.pairRequests, req] };
+    }
+    case "pair.resolved":
+      return { ...s, pairRequests: s.pairRequests.filter((x) => x.requestId !== m.requestId) };
     case "threads":
       return { ...s, threads: { ...s.threads, [m.sessionId]: m.threads } };
     case "toast":
