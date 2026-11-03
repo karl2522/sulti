@@ -92,8 +92,8 @@ export function Connect({ onPaired }: { onPaired: (d: Device) => void }) {
       ? "Check that this code matches the one on your PC."
       : "Type the code from the Sulti pairing page on your PC."
     : ask
-      ? "On your connected phone, tap Allow when it shows " + ask.match + "."
-      : "Ask a phone that's already connected to let this one in.";
+      ? "Open Sulti where it's already connected, like Safari or another phone, and tap Allow when it shows " + ask.match + "."
+      : "Ask a browser or phone where Sulti is already connected to let this one in.";
 
   return (
     <form className="page page-none connect" onSubmit={submit}>
@@ -130,7 +130,7 @@ export function Connect({ onPaired }: { onPaired: (d: Device) => void }) {
         {!useCode && ask && !ask.asked && (
           <p className="note" role="status">
             <Icon name="alert" size={16} />
-            <span>Sulti isn't open on your other phone right now. Open it there and it will ask you.</span>
+            <span>Sulti isn't open anywhere that's connected right now. Open it there, for example in Safari, and it will ask you. This request waits 2 minutes.</span>
           </p>
         )}
         {!useCode && !ask && (
