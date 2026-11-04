@@ -140,6 +140,7 @@ async function handleRequest(id, method, params = {}) {
       if (!t) return fail(-32600, `no rollout found for thread id ${params.threadId}`);
       // Stands in for a thread another Codex process has open.
       if (t.preview.includes("[locked]")) return fail(-32600, `thread ${t.id} already has an active writer`);
+      if (t.preview.includes("[broken]")) return fail(-32603, "failed to load thread");
       return ok({ thread: threadView(t), model: "mock-model", modelProvider: "mock", serviceTier: null, disabledPluginIds: [], cwd: t.cwd, instructionSources: [], approvalPolicy: "on-request", approvalsReviewer: "user", sandbox: { type: "readOnly" }, reasoningEffort: null, collaborationMode: null, turnsBackwardsCursor: null, itemsBackwardsCursor: null });
     }
     case "thread/fork": {

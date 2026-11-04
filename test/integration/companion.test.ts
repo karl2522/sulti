@@ -248,6 +248,19 @@ describe("companion against the mock app-server", () => {
     phone.send({ type: "prompt.send", sessionId: "lead-tracker", text: "Continue." });
     await phone.waitFor("answer");
     expect(turnStarts(t)[0]!.params.threadId).toBe("thread-old-1");
+    // The chat keeps its own folder, sandbox and approvals; only the id is sent.
+    const resume = t.mockLog().find((e) => e.method === "thread/resume") as { params: Record<string, unknown> };
+    expect(Object.keys(resume.params).sort()).toEqual(["excludeTurns", "threadId"]);
+  });
+
+  it("a chat that fails to reopen is an error, never a silent new chat", async () => {
+    const seed = JSON.stringify([{ id: "thread-broken", cwd: "D:\\work\\lead-tracker", preview: "[broken] Half done" }]);
+    const dataDir = mkdtempSync(join(tmpdir(), "sulti-it-"));
+    writeFileSync(join(dataDir, "threads.json"), JSON.stringify({ "lead-tracker": "thread-broken" }));
+    const { t, phone } = await setup({ mockArgs: ["--seed", seed], dataDir });
+    phone.send({ type: "prompt.send", sessionId: "lead-tracker", text: "Continue." });
+    expect(((await phone.waitFor("toast")) as Of<"toast">).message).toMatch(/failed to load/);
+    expect(t.mockLog().some((e) => e.method === "thread/start")).toBe(false);
   });
 
   it("never sends unsandboxed methods, whatever the phone says", async () => {

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { APP_NAME, APP_SLUG, APP_VERSION, type ActivityItem } from "@sulti/core";
-import { AppServerClient, NO_RESPONSE, connectWebSocket, stdioTransport, type V2 } from "@sulti/protocol";
+import { AppServerClient, NO_RESPONSE, connectWebSocket, proxyTransport, stdioTransport, type V2 } from "@sulti/protocol";
 import { toActivity } from "./activity.js";
 import { APP_SERVER_DOWN } from "./errors.js";
 import type { Session } from "./sessions.js";
@@ -12,7 +12,7 @@ import { TurnTracker, type TurnOutcome } from "./turns.js";
 export type Logger = (msg: string) => void;
 
 export interface ConnectionOptions {
-  mode: "stdio" | "shared";
+  mode: "auto" | "stdio" | "shared";
   /** Override for tests: [file, ...args]. Default: codex app-server. */
   command?: string[] | null;
   sharedUrl?: string;
@@ -76,8 +76,21 @@ export class AppServerConnection {
     if (this.stopped) return;
     const log = this.opts.log ?? (() => {});
     let client: AppServerClient | null = null;
+    let via: string = this.opts.mode;
     try {
-      const c = (client = this.opts.mode === "shared" ? await this.connectShared() : this.spawnStdio());
+      let c: AppServerClient;
+      if (this.opts.mode === "shared") c = await this.connectShared();
+      else if (this.opts.mode === "auto" && !this.opts.command?.length) {
+        try {
+          c = await this.connectDaemon();
+          via = "Codex daemon";
+        } catch (err) {
+          log(`Codex app-server daemon not reachable (${(err as Error).message}); using Sulti's own app-server`);
+          c = this.spawnStdio();
+          via = "stdio";
+        }
+      } else c = this.spawnStdio();
+      client = c;
       c.onClose((reason) => {
         if (this.current === c) this.current = null;
         log(`app-server connection closed: ${reason}`);
@@ -87,7 +100,7 @@ export class AppServerConnection {
       await c.initialize({ name: APP_SLUG, title: APP_NAME, version: APP_VERSION });
       this.current = c;
       this.attempt = 0;
-      log(`app-server ready (${this.opts.mode})`);
+      log(`app-server ready (${via})`);
       for (const cb of this.upCbs) cb(c);
       const waiters = this.readyWaiters;
       this.readyWaiters = [];
@@ -129,6 +142,13 @@ export class AppServerConnection {
     const child = spawnResolved(cmd, args);
     child.stderr.resume(); // drain; app-server logs can contain local details, so don't persist them
     return new AppServerClient(stdioTransport(child), { timeoutMs: 60_000, onProtocolError: (m) => this.opts.log?.(`app-server: ${m}`) });
+  }
+
+  /** The app-server daemon Codex terminals share, through "codex app-server proxy". */
+  private async connectDaemon(): Promise<AppServerClient> {
+    const child = spawnResolved(resolveCodex(), ["app-server", "proxy"]);
+    child.stderr.resume();
+    return new AppServerClient(await proxyTransport(child), { timeoutMs: 60_000, onProtocolError: (m) => this.opts.log?.(`app-server: ${m}`) });
   }
 
   private async connectShared(): Promise<AppServerClient> {
@@ -268,7 +288,10 @@ export class CodexBridge {
       try {
         return await this.attachNow(s, known);
       } catch (err) {
-        this.log(`thread/resume failed for ${s.id}, starting a new thread: ${(err as Error).message}`);
+        // Codex saves a chat only once it has a message; an empty one can't be reopened, and a
+        // fresh chat is the same thing. Anything else is an error, never a silent new chat.
+        if (!/no rollout found/i.test((err as Error).message)) throw err;
+        this.log(`${s.id}: its chat was never used, starting a new one`);
       }
     }
     const client = await this.conn.ready();
@@ -278,9 +301,10 @@ export class CodexBridge {
   }
 
   /**
-   * Point a session at an existing thread. When another Codex process (the
-   * desktop app, an open terminal) holds it, Codex refuses the resume with
-   * "already has an active writer"; continue a copy of it instead.
+   * Point a session at an existing thread. Through the shared daemon this is the very chat open
+   * in a terminal. The chat keeps its own folder, sandbox and approval settings; sessions.json
+   * applies to chats Sulti starts. When another Codex process still holds the chat (Sulti on its
+   * own app-server), Codex refuses with "active writer"; continue a copy instead.
    */
   attachThread(s: Session, threadId: string): Promise<string> {
     return this.serial(s.id, () => this.attachNow(s, threadId));
@@ -288,13 +312,12 @@ export class CodexBridge {
 
   private async attachNow(s: Session, threadId: string): Promise<string> {
     const client = await this.conn.ready();
-    const params = { threadId, cwd: s.cwd, sandbox: s.sandbox, approvalPolicy: s.approvalPolicy, excludeTurns: true };
     let id = threadId;
     try {
-      await client.request("thread/resume", params);
+      await client.request("thread/resume", { threadId, excludeTurns: true });
     } catch (err) {
       if (!/active writer/i.test((err as Error).message)) throw err;
-      id = (await client.request("thread/fork", params)).thread.id;
+      id = (await client.request("thread/fork", { threadId, cwd: s.cwd, sandbox: s.sandbox, approvalPolicy: s.approvalPolicy, excludeTurns: true })).thread.id;
       this.events.toast("info", `That chat is open in Codex on your PC, so ${s.name} continues a copy of it.`);
     }
     this.use(s, id);

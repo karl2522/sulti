@@ -78,7 +78,7 @@ function Threads({ sessionId }: { sessionId: string }) {
   return (
     <div className="sheet-body">
       <h2 className="sheet-title">Chats</h2>
-      <p className="muted">{busy ? "Codex is working. Stop the turn before switching chats." : "Your messages go to the chat you pick. A chat from a terminal continues here; reopen it there with codex resume to see the new messages."}</p>
+      <p className="muted">{busy ? "Codex is working. Stop the turn before switching chats." : "Your messages go to the chat you pick, even one open in a Codex terminal. The terminal shows them as they happen."}</p>
       <ul className="group">
         <li className="row">
           <button type="button" className="row-main press-row" disabled={busy || !session?.threadId} onClick={() => send({ type: "thread.new", sessionId }) && close()}>

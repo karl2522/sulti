@@ -1,4 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { Duplex } from "node:stream";
 import WebSocket from "ws";
 
 /** A bidirectional line channel. The JSON-RPC client only needs this much. */
@@ -61,6 +62,8 @@ export interface WebSocketTransportOptions {
   bearerToken?: string;
   /** Connect timeout in ms. */
   timeoutMs?: number;
+  /** Carry the WebSocket over this stream instead of a TCP connection. */
+  socket?: Duplex;
 }
 
 /** One JSON-RPC message per WebSocket text frame. Resolves once connected. */
@@ -68,7 +71,7 @@ export function connectWebSocket(url: string, opts: WebSocketTransportOptions = 
   return new Promise((resolve, reject) => {
     const headers: Record<string, string> = {};
     if (opts.bearerToken) headers.Authorization = `Bearer ${opts.bearerToken}`;
-    const ws = new WebSocket(url, { headers, handshakeTimeout: opts.timeoutMs ?? 5000 });
+    const ws = new WebSocket(url, { headers, handshakeTimeout: opts.timeoutMs ?? 5000, ...(opts.socket ? { createConnection: () => opts.socket as never } : {}) });
     const lineCbs: ((l: string) => void)[] = [];
     const closeCbs: ((r: string) => void)[] = [];
     let open = false;
@@ -93,4 +96,30 @@ export function connectWebSocket(url: string, opts: WebSocketTransportOptions = 
       if (!open) reject(err);
     });
   });
+}
+
+/**
+ * The local Codex app-server daemon, through "codex app-server proxy": the proxy passes
+ * its stdin/stdout to the daemon's control socket, which speaks WebSocket. Codex terminals
+ * are clients of the same daemon, so a chat open there can be continued here.
+ */
+export async function proxyTransport(child: ChildProcessWithoutNullStreams, timeoutMs = 10_000): Promise<Transport> {
+  const socket = Object.assign(Duplex.from({ readable: child.stdout, writable: child.stdin }), {
+    // http and ws call these on real sockets; a pipe has nothing to tune.
+    setNoDelay: () => {},
+    setTimeout: () => {},
+    setKeepAlive: () => {},
+    ref: () => {},
+    unref: () => {},
+  });
+  socket.on("error", () => {});
+  child.on("error", () => {});
+  try {
+    const t = await connectWebSocket("ws://localhost/", { socket, timeoutMs });
+    child.on("exit", () => t.close());
+    return { ...t, close: () => (t.close(), setTimeout(() => child.kill(), 2000).unref()) };
+  } catch (err) {
+    child.kill();
+    throw err;
+  }
 }

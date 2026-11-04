@@ -44,8 +44,8 @@ export interface TestCompanion {
   stop(): Promise<void>;
 }
 
-export async function startTestCompanion(opts: { scenario?: string; mockArgs?: string[]; sessions?: unknown[]; codexSessionsDir?: string; openFiles?: boolean } = {}): Promise<TestCompanion> {
-  const dataDir = mkdtempSync(join(tmpdir(), "sulti-it-"));
+export async function startTestCompanion(opts: { scenario?: string; mockArgs?: string[]; sessions?: unknown[]; codexSessionsDir?: string; openFiles?: boolean; dataDir?: string } = {}): Promise<TestCompanion> {
+  const dataDir = opts.dataDir ?? mkdtempSync(join(tmpdir(), "sulti-it-"));
   const logFile = join(dataDir, "mock-requests.jsonl");
   writeFileSync(join(dataDir, "sessions.json"), JSON.stringify({ sessions: opts.sessions ?? TEST_SESSIONS }));
   const config = loadConfig({}, {

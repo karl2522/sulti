@@ -10,8 +10,12 @@ export const ConfigFile = z.object({
   publicUrl: z.string().url().optional(),
   port: z.number().int().min(0).max(65535).optional(),
   hookPort: z.number().int().min(0).max(65535).optional(),
-  /** "stdio": spawn codex app-server. "shared": connect to a shared ws app-server. */
-  mode: z.enum(["stdio", "shared"]).optional(),
+  /**
+   * "auto" (default): join the local Codex app-server daemon your terminals use, so their open
+   * chats can be continued; fall back to "stdio". "stdio": Sulti's own codex app-server.
+   * "shared": a ws:// app-server.
+   */
+  mode: z.enum(["auto", "stdio", "shared"]).optional(),
   sharedUrl: z.string().optional(),
   sharedTokenFile: z.string().optional(),
   /** Override the app-server command (tests use the mock). */
@@ -26,7 +30,7 @@ export interface Config {
   publicUrl: string | null;
   port: number;
   hookPort: number;
-  mode: "stdio" | "shared";
+  mode: "auto" | "stdio" | "shared";
   sharedUrl: string;
   sharedTokenFile: string;
   appServerCommand: string[] | null;
@@ -65,7 +69,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Part
     publicUrl: (env.SULTI_PUBLIC_URL || parsed.publicUrl || null)?.replace(/\/+$/, "") ?? null,
     port: envPort(env.SULTI_PORT) ?? parsed.port ?? DEFAULT_PHONE_PORT,
     hookPort: envPort(env.SULTI_HOOK_PORT) ?? parsed.hookPort ?? DEFAULT_HOOK_PORT,
-    mode: (env.SULTI_MODE as Config["mode"]) || parsed.mode || "stdio",
+    mode: (env.SULTI_MODE as Config["mode"]) || parsed.mode || "auto",
     sharedUrl: parsed.sharedUrl ?? `ws://127.0.0.1:${SHARED_APP_SERVER_PORT}`,
     sharedTokenFile: parsed.sharedTokenFile ?? join(dataDir, "app-server-token"),
     appServerCommand,
