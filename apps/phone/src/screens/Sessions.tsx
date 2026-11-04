@@ -1,5 +1,5 @@
 import { useApp } from "../appContext.js";
-import { clock, viewSession, type SessionView } from "../present.js";
+import { clock, isOpen, viewSession, type SessionView } from "../present.js";
 import { navigate } from "../router.js";
 import { elapsedOf } from "../usePlayer.js";
 import { AnswerControls, ProgressRing } from "../ui/AnswerControls.js";
@@ -14,7 +14,9 @@ export function Sessions() {
   const playing = n && n.status !== "done" ? { sessionId: n.sessionId, answerId: n.answerId, paused: n.status === "paused" } : null;
   const views = state.sessions.map((s) => viewSession(state, s, heard, playing, now));
   const needs = views.filter((v) => v.needsYou);
-  const others = views.filter((v) => !v.needsYou);
+  // Sessions you can use now first; folders not open in Codex on the PC wait under Recent.
+  const recent = views.filter((v) => !v.needsYou && v.session.unlisted && isOpen(v.session) === false);
+  const others = views.filter((v) => !v.needsYou && !recent.includes(v));
   const talkTo = state.sessions.find((s) => s.id === state.activeSessionId && !s.unlisted) ?? state.sessions.find((s) => !s.unlisted);
   const conn = state.conn === "open" ? (state.host ?? "Your PC") : state.conn === "connecting" ? "Connecting…" : "Offline";
 
@@ -46,6 +48,7 @@ export function Sessions() {
           <>
             {needs.length > 0 && <Group title="Needs you" views={needs} offset={0} />}
             {others.length > 0 && <Group title={needs.length ? "Other sessions" : "Your sessions"} views={others} offset={needs.length} />}
+            {recent.length > 0 && <Group title="Recent" views={recent} offset={needs.length + others.length} />}
           </>
         )}
       </div>

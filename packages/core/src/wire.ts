@@ -28,6 +28,8 @@ export const SessionInfo = z.object({
   since: z.number().nullable().optional(),
   /** True when the only thing running is a Codex terminal in this folder, not a Sulti turn. */
   terminal: z.boolean().optional(),
+  /** A chat in this folder is open in Codex on the PC (terminal or app). Absent when the PC can't tell. */
+  open: z.boolean().optional(),
 });
 export type SessionInfo = z.infer<typeof SessionInfo>;
 
@@ -66,6 +68,9 @@ export const ThreadSummary = z.object({
   preview: z.string(),
   name: z.string().nullable(),
   updatedAt: z.number(),
+  /** Open in Codex on the PC, and mid-turn there. */
+  open: z.boolean().optional(),
+  working: z.boolean().optional(),
 });
 export type ThreadSummary = z.infer<typeof ThreadSummary>;
 

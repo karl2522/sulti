@@ -53,6 +53,10 @@ describe("companion against the mock app-server", () => {
     const list = (await phone.waitFor((m) => m.type === "sessions" && m.sessions.some((s) => s.name === "brand-new"), 8000, mark)) as Of<"sessions">;
     expect(list.sessions.find((s) => s.id === "sole-harbor")).toMatchObject({ status: "idle", terminal: false });
     expect(list.sessions.find((s) => s.name === "brand-new")).toMatchObject({ status: "working", terminal: true, unlisted: true });
+    // Listen-only folders get their chat list too (read only).
+    const id = list.sessions.find((s) => s.name === "brand-new")!.id;
+    phone.send({ type: "thread.list", sessionId: id });
+    expect(await phone.waitFor((m) => m.type === "threads" && m.sessionId === id)).toBeTruthy();
   });
 
   it("prompt -> final answer from the app-server", async () => {

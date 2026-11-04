@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { SessionRegistry, parseSessions } from "./sessions.js";
+import type { OpenFileProbe } from "./openfiles.js";
 import { STALE_MS, TerminalWatcher } from "./terminals.js";
 
 const CWD = "C:\\work\\app";
@@ -14,7 +15,7 @@ function setup(now = () => Date.now()) {
   const root = mkdtempSync(join(tmpdir(), "sulti-codex-"));
   mkdirSync(join(root, "2026", "11", "05"), { recursive: true });
   const changes: Map<string, number>[] = [];
-  const w = new TerminalWatcher(root, (t) => changes.push(t), undefined, now);
+  const w = new TerminalWatcher(root, (s) => changes.push(s.turns), undefined, now);
   const file = (name = "rollout-a.jsonl") => join(root, "2026", "11", "05", name);
   return { root, w, changes, file };
 }
@@ -73,6 +74,26 @@ describe("terminal turns from Codex session logs", () => {
 });
 
 describe("session status with terminal turns", () => {
+  it("reports folders with a chat open, including old quiet logs, once the check answers", async () => {
+    const root = mkdtempSync(join(tmpdir(), "sulti-codex-"));
+    const day = join(root, "2026", "11", "05");
+    mkdirSync(day, { recursive: true });
+    const id = "01a18ecb-b25a-7950-a5db-ce2b42d0a5a7";
+    writeFileSync(join(day, `rollout-x-${id}.jsonl`), meta("vscode", "C:\\work\\open") + ev("task_started") + ev("task_complete"));
+    writeFileSync(join(day, "rollout-y.jsonl"), meta("cli", "C:\\work\\closed"));
+    const old = (Date.now() - 2 * STALE_MS) / 1000;
+    utimesSync(join(day, `rollout-x-${id}.jsonl`), old, old); // open but quiet for an hour
+    const probe = { check: async (paths: string[]) => new Set(paths.filter((p) => p.includes(id))), stop() {} } as unknown as OpenFileProbe;
+    const states: (Set<string> | null)[] = [];
+    const w = new TerminalWatcher(root, (s) => states.push(s.open), undefined, Date.now, probe);
+    w.refresh();
+    expect(w.openFolders()).toBeNull(); // not known before the first answer
+    await w.settled();
+    expect(states.at(-1)).toEqual(new Set(["C:\\work\\open"]));
+    expect(w.chat(id)).toEqual({ open: true, working: false });
+    w.stop();
+  });
+
   it("shows a terminal turn as working without taking over Sulti's own state", () => {
     const r = new SessionRegistry(parseSessions({ sessions: [{ name: "App", cwd: CWD }] }));
     expect(r.setTerminal("app", 1000)).toBe(true);

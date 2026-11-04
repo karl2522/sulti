@@ -273,7 +273,9 @@ await step("stop hook from a terminal", async () => {
   await home();
   await row("demo-app").getByText("Answer ready").waitFor({ timeout: 5000 });
   await go("/s/unlisted-demo-app");
-  await page.getByText("Listen only").waitFor();
+  // No Codex chat is open in that folder, so it reads as not open and lists its chats.
+  await page.locator(".state-chip").getByText("Not open").waitFor();
+  await page.getByRole("heading", { name: "Chats in this folder" }).waitFor();
 });
 
 await step("restart companion and reconnect", async () => {

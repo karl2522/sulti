@@ -70,6 +70,8 @@ export class SessionRegistry {
   private readonly status = new Map<string, SessionStatus>();
   /** Start of a turn running in a Codex terminal in this folder, from Codex's session logs. */
   private readonly terminal = new Map<string, number>();
+  /** Sessions with a chat open in Codex on the PC; null when that can't be told. */
+  private open: Set<string> | null = null;
   private readonly statusSince = new Map<string, number>();
 
   // ponytail: remembered folders are never dropped; prune by last answer age if the list grows.
@@ -141,6 +143,14 @@ export class SessionRegistry {
     return this.change(id, () => (startedAt === null ? this.terminal.delete(id) : this.terminal.set(id, startedAt)));
   }
 
+  /** Returns true when the set of open sessions changed. */
+  setOpen(ids: Set<string> | null): boolean {
+    const key = (s: Set<string> | null) => (s ? [...s].sort().join("\n") : null);
+    if (key(ids) === key(this.open)) return false;
+    this.open = ids;
+    return true;
+  }
+
   private change(id: string, apply: () => void): boolean {
     const before = this.getStatus(id) + this.fromTerminal(id);
     apply();
@@ -158,6 +168,16 @@ export class SessionRegistry {
   info(id: string, threadId: string | null): SessionInfo | null {
     const s = this.sessions.get(id);
     if (!s) return null;
-    return { id: s.id, name: s.name, aliases: s.aliases, status: this.getStatus(id), unlisted: s.unlisted, threadId, since: this.since(id), terminal: this.fromTerminal(id) };
+    return {
+      id: s.id,
+      name: s.name,
+      aliases: s.aliases,
+      status: this.getStatus(id),
+      unlisted: s.unlisted,
+      threadId,
+      since: this.since(id),
+      terminal: this.fromTerminal(id),
+      ...(this.open ? { open: this.open.has(id) } : {}),
+    };
   }
 }

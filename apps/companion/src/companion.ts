@@ -12,6 +12,7 @@ import { Pairing } from "./pairing.js";
 import { startPhoneServer, type RunningServer } from "./server.js";
 import { SessionRegistry, loadSessions } from "./sessions.js";
 import { ThreadStore, loadSecrets } from "./store.js";
+import { OpenFileProbe } from "./openfiles.js";
 import { TerminalWatcher, codexSessionsDir } from "./terminals.js";
 
 export interface CompanionHandle {
@@ -33,6 +34,8 @@ export interface CompanionOverrides {
   backoff?: number[];
   /** Codex's session logs folder (default: CODEX_HOME/sessions). */
   codexSessionsDir?: string;
+  /** Check which Codex chats are open (Windows). Tests turn it off. */
+  openFiles?: boolean;
   log?: (msg: string) => void;
 }
 
@@ -66,10 +69,12 @@ export async function startCompanion(config: Config, o: CompanionOverrides = {})
     renderAudio: o.renderAudio ?? ((text, out) => renderWav(text, out, config.tts)),
     copyToPc: o.copyToPc ?? copyToPcClipboard,
     refreshTerminals: () => terminals.refresh(),
+    chatState: (id) => terminals.chat(id),
     log,
   });
   hub.bridge = new CodexBridge(conn, threads, hub.bridgeEvents(), log);
-  const terminals = new TerminalWatcher(o.codexSessionsDir ?? codexSessionsDir(), (turns) => hub.syncTerminals(turns), log);
+  const probe = o.openFiles !== false && OpenFileProbe.supported() ? new OpenFileProbe(log) : null;
+  const terminals = new TerminalWatcher(o.codexSessionsDir ?? codexSessionsDir(), (state) => hub.syncTerminals(state), log, Date.now, probe);
   terminals.start();
   // Shared mode: resume up front so turns started in a terminal reach the phone.
   // stdio resumes lazily; resuming every chat at startup would lock chats you

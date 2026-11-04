@@ -1,7 +1,7 @@
-import type { ActivityItem, Goal, SessionInfo } from "@sulti/core";
+import type { ActivityItem, Goal, SessionInfo, ThreadSummary } from "@sulti/core";
 import { useEffect, useState } from "react";
 import { useApp } from "../appContext.js";
-import { activityVerb, ago, chatLine, firstLine, span } from "../present.js";
+import { activityVerb, ago, chatLine, chatState, firstLine, idleLabel, span } from "../present.js";
 import { navigate } from "../router.js";
 import { latestAnswer } from "../state.js";
 import { AnswerControls } from "../ui/AnswerControls.js";
@@ -10,6 +10,38 @@ import { Dock, nth, PageHeader, useNow } from "../ui/parts.js";
 
 const ACTIVITY_ICON: Record<ActivityItem["kind"], IconName> = { read: "file", search: "search", list: "folder", command: "terminal", edit: "pencil" };
 const SKILLS_SHOWN = 5;
+const FOLDER_CHATS_SHOWN = 8;
+
+/** A listen-only folder's chats, newest first, marked when open or working in Codex on the PC. */
+function FolderChats({ threads, i }: { threads: ThreadSummary[] | undefined; i: number }) {
+  return (
+    <section className="section stagger" style={nth(i)} aria-label="Chats in this folder">
+      <h2 className="section-title">Chats in this folder</h2>
+      {!threads ? (
+        <span className="sk sk-line" aria-label="Loading chats" />
+      ) : !threads.length ? (
+        <p className="muted">No chats here yet.</p>
+      ) : (
+        <ul className="group">
+          {[...threads]
+            .sort((a, b) => Number(!!b.working) - Number(!!a.working) || Number(!!b.open) - Number(!!a.open) || b.updatedAt - a.updatedAt)
+            .slice(0, FOLDER_CHATS_SHOWN)
+            .map((t) => (
+              <li key={t.id} className="row">
+                <div className="row-main">
+                  {t.working ? <Spinner size={18} /> : <Icon name="chat" size={20} />}
+                  <span className="row-text">
+                    <span className="row-title clamp-2">{t.name ?? firstLine(t.preview || "Untitled chat", 120)}</span>
+                    <span className={"row-detail" + (t.working || t.open ? " tone-" + (t.working ? "lilac" : "lagoon") : "")}>{chatState(t)}</span>
+                  </span>
+                </div>
+              </li>
+            ))}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 export function SessionDetail({ id }: { id: string }) {
   const { state, send, openSheet } = useApp();
@@ -23,9 +55,9 @@ export function SessionDetail({ id }: { id: string }) {
   }, [s?.id, state.conn]);
   // The chat list names the current chat; refresh it when the session moves to another chat.
   useEffect(() => {
-    if (s && !s.unlisted && state.conn === "open") send({ type: "thread.list", sessionId: s.id });
+    if (s && state.conn === "open") send({ type: "thread.list", sessionId: s.id });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s?.id, s?.threadId, state.conn]);
+  }, [s?.id, s?.threadId, s?.open, s?.status, state.conn]);
 
   if (!s) {
     return (
@@ -72,11 +104,12 @@ export function SessionDetail({ id }: { id: string }) {
           ) : s.status === "error" ? (
             <span className="state-chip chip-coral">Last turn failed</span>
           ) : (
-            <span className="state-chip chip-muted">{s.unlisted ? "Listen only" : "Idle"}</span>
+            <span className="state-chip chip-muted">{idleLabel(s)}</span>
           )}
         </div>
 
-        {s.unlisted && <p className="lead">This terminal isn't in sessions.json, so Sulti only reads its answers. Add the folder there to send it prompts.</p>}
+        {s.unlisted && <p className="lead">This folder isn't in sessions.json, so Sulti reads its answers but can't send it prompts. Add the folder there to talk to it.</p>}
+        {s.unlisted && <FolderChats threads={state.threads[s.id]} i={i++} />}
         {!s.unlisted && (
           <section className="section stagger" style={nth(i++)} aria-label="Chat">
             <h2 className="section-title">Chat</h2>

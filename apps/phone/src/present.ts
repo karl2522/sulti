@@ -103,7 +103,7 @@ export function viewSession(state: AppState, s: SessionInfo, heard: ReadonlySet<
   }
   if (s.status === "working") {
     const last = state.activity[s.id]?.at(-1);
-    const detail = s.terminal ? "In a terminal on your PC" : goal ? "Goal: " + goal.objective : last ? activityVerb(last) + " " + last.text : "Codex is on it";
+    const detail = s.terminal ? "In Codex on your PC" : goal ? "Goal: " + goal.objective : last ? activityVerb(last) + " " + last.text : "Codex is on it";
     const mins = s.since ? Math.floor((now - s.since) / 60_000) : 0;
     const label = mins < 1 ? "Working" : mins < 60 ? "Working for " + mins + " min" : "Working for " + span(mins * 60);
     return { ...base, tone: "lilac", icon: "spinner", label, detail: firstLine(detail) };
@@ -112,5 +112,23 @@ export function viewSession(state: AppState, s: SessionInfo, heard: ReadonlySet<
     return { ...base, tone: "lagoon", icon: "speaker", label: "Answer ready", detail: (answer.source === "hook" ? "From a terminal, " : "") + ago(answer.createdAt, now), needsYou: true, answer };
   }
   if (s.status === "error") return { ...base, tone: "coral", icon: "alert", label: "Last turn failed", detail: answer ? firstLine(answer.text) : "Open it to try again" };
-  return { ...base, tone: "muted", icon: "none", label: s.unlisted ? "Listen only" : "Idle", detail: answer ? firstLine(answer.text) : "No answers yet", answer };
+  return { ...base, tone: s.open ? "lagoon" : "muted", icon: "none", label: idleLabel(s), detail: answer ? firstLine(answer.text) : "No answers yet", answer };
+}
+
+/** An idle session: open in Codex on the PC, closed, or (when the PC can't tell) listen only. */
+export function idleLabel(s: SessionInfo): string {
+  if (s.open) return "Open on your PC";
+  if (!s.unlisted) return "Idle";
+  return s.open === false ? "Not open" : "Listen only";
+}
+
+/** Open or working in Codex on the PC; null when the PC can't tell. */
+export function isOpen(s: SessionInfo): boolean | null {
+  if (s.open === undefined) return null;
+  return s.open || s.status === "working";
+}
+
+/** A chat's line in a chat list. */
+export function chatState(t: ThreadSummary, now = Date.now()): string {
+  return t.working ? "Working in Codex now" : t.open ? "Open in Codex, updated " + ago(t.updatedAt, now) : "Updated " + ago(t.updatedAt, now);
 }

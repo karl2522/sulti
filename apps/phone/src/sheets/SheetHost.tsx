@@ -1,7 +1,7 @@
 import type { Answer } from "@sulti/core";
 import { useEffect, useState } from "react";
 import { useApp, type SheetSpec } from "../appContext.js";
-import { ago, firstLine } from "../present.js";
+import { chatState, firstLine } from "../present.js";
 import { Icon } from "../ui/icons.js";
 import { Avatar } from "../ui/parts.js";
 import { Sheet, useSheetClose } from "../ui/Sheet.js";
@@ -103,7 +103,7 @@ function Threads({ sessionId }: { sessionId: string }) {
                 <button type="button" className="row-main press-row" disabled={current || busy} onClick={() => send({ type: "thread.attach", sessionId, threadId: t.id }) && close()}>
                   <span className="row-text">
                     <span className="row-title clamp-2">{t.name ?? firstLine(t.preview || "Untitled chat", 120)}</span>
-                    <span className="row-detail">{(current ? "Current, " : "") + ago(t.updatedAt)}</span>
+                    <span className="row-detail">{(current ? "Current. " : "") + chatState(t)}</span>
                   </span>
                   {current && <Icon name="check" size={20} />}
                 </button>

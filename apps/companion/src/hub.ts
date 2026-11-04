@@ -8,6 +8,7 @@ import type { Pairing, PairRequestInfo } from "./pairing.js";
 import type { Session, SessionRegistry } from "./sessions.js";
 import { signedAudioPath } from "./signing.js";
 import type { ThreadStore } from "./store.js";
+import type { TerminalState } from "./terminals.js";
 import type { TurnOutcome } from "./turns.js";
 
 export interface PhoneClient {
@@ -26,6 +27,8 @@ export interface HubDeps {
   copyToPc: (text: string) => Promise<void>;
   /** Re-read the Codex terminal logs now, so a phone that just opened sees current status. */
   refreshTerminals?: () => void;
+  /** Whether a chat is open in Codex on the PC and mid-turn there. */
+  chatState?: (threadId: string) => { open?: boolean; working: boolean };
   log?: (msg: string) => void;
 }
 
@@ -91,21 +94,25 @@ export class Hub {
   }
 
   /**
-   * Turns running in Codex terminals, by folder. A folder Sulti hasn't seen yet shows up as
-   * soon as its first turn starts, without waiting for the Stop hook at the end.
+   * Codex chats on the PC: turns running, and folders with a chat open. A folder Sulti hasn't
+   * seen shows up as soon as a chat there is open or working, without waiting for the Stop hook.
    */
-  syncTerminals(turns: Map<string, number>): void {
+  syncTerminals({ turns, open }: TerminalState): void {
     const r = this.d.registry;
     const running = new Map<string, number>();
     let added = false;
-    for (const [cwd, at] of turns) {
+    const sessionFor = (cwd: string) => {
       const known = r.findByCwd(cwd);
-      const s = known ?? r.forHookCwd(cwd);
       added ||= !known;
-      running.set(s.id, Math.min(running.get(s.id) ?? Infinity, at));
+      return known ?? r.forHookCwd(cwd);
+    };
+    for (const [cwd, at] of turns) {
+      const id = sessionFor(cwd).id;
+      running.set(id, Math.min(running.get(id) ?? Infinity, at));
     }
+    const openChanged = r.setOpen(open && new Set([...open].map((cwd) => sessionFor(cwd).id)));
     const changed = r.list().filter((s) => r.setTerminal(s.id, running.get(s.id) ?? null));
-    if (added) this.broadcast(this.sessionsMsg());
+    if (added || openChanged) this.broadcast(this.sessionsMsg());
     else for (const s of changed) this.broadcast(this.statusMsg(s.id));
   }
 
@@ -221,12 +228,13 @@ export class Hub {
       case "answer.audioUrl":
         return this.audioUrl(c, msg.answerId);
       case "thread.list": {
-        const s = this.promptable(msg.sessionId);
+        // Read only, so listen-only folders get their chat list too.
+        const s = this.session(msg.sessionId);
         const threads = await this.bridge.listThreads(s);
         return c.send({
           type: "threads",
           sessionId: s.id,
-          threads: threads.map((t) => ({ id: t.id, preview: t.preview.slice(0, 200), name: t.name, updatedAt: t.updatedAt })),
+          threads: threads.map((t) => ({ id: t.id, preview: t.preview.slice(0, 200), name: t.name, updatedAt: t.updatedAt, ...this.d.chatState?.(t.id) })),
         });
       }
       case "thread.attach": {
