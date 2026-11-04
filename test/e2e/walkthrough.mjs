@@ -24,7 +24,8 @@ writeFileSync(join(dir, "sessions.json"), JSON.stringify({ sessions: [
   { name: "Lead Tracker", cwd: join(dir, "work", "lead-tracker"), aliases: ["led tracker"], sandbox: "read-only" },
   { name: "Kernel Labs", cwd: join(dir, "work", "kernel-labs"), aliases: ["colonel labs"] },
 ] }));
-const env = { ...process.env, SULTI_DATA_DIR: dir, SULTI_PORT: String(PORT), SULTI_HOOK_PORT: String(HOOK), SULTI_PUBLIC_URL: base,
+// CODEX_HOME points at an empty folder so the owner's real Codex sessions never show up here.
+const env = { ...process.env, CODEX_HOME: join(dir, "codex-home"), SULTI_DATA_DIR: dir, SULTI_PORT: String(PORT), SULTI_HOOK_PORT: String(HOOK), SULTI_PUBLIC_URL: base,
   SULTI_APP_SERVER_CMD: JSON.stringify([process.execPath, join(process.cwd(), "test", "mock-app-server", "server.mjs"), "--delay", "40"]) };
 let comp = null, compOut = "";
 function startCompanion() {
@@ -259,7 +260,7 @@ await step("switch chats", async () => {
 await step("voice switch and unclear switch", async () => {
   await talk("sole-harbor", "switch to colonel labs");
   await home();
-  await row("Kernel Labs").getByText("Active").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Talk to Kernel Labs" }).waitFor({ timeout: 5000 });
   await talk("kernel-labs", "switch to bananas");
   await page.getByRole("heading", { name: /Which session\?/ }).waitFor();
   await page.keyboard.press("Escape");

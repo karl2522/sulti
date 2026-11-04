@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { get } from "node:http";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CompanionMessage } from "@sulti/core";
@@ -29,6 +30,29 @@ describe("companion against the mock app-server", () => {
     const { t } = await setup();
     expect((t.c.phone.server.address() as { address: string }).address).toBe("127.0.0.1");
     expect((t.c.control.server.address() as { address: string }).address).toBe("127.0.0.1");
+  });
+
+  it("shows turns running in Codex terminals, including folders it hasn't seen", async () => {
+    const codex = mkdtempSync(join(tmpdir(), "sulti-codex-"));
+    const { phone } = await setup({ codexSessionsDir: codex });
+    const day = join(codex, "2026", "11", "05");
+    mkdirSync(day, { recursive: true });
+    const log = (cwd: string, ...types: string[]) =>
+      [{ timestamp: "2026-11-05T01:00:00.000Z", type: "session_meta", payload: { cwd, source: "cli" } }, ...types.map((type) => ({ timestamp: "2026-11-05T01:00:05.000Z", type: "event_msg", payload: { type } }))]
+        .map((l) => JSON.stringify(l) + "\n")
+        .join("");
+    // Pushed without asking: the watcher sees the log change.
+    writeFileSync(join(day, "a.jsonl"), log("D:\\work\\sole-harbor\\api", "task_started"));
+    const working = (await phone.waitFor((m) => m.type === "session.status" && m.sessionId === "sole-harbor")) as Of<"session.status">;
+    expect(working).toMatchObject({ status: "working", terminal: true, since: Date.parse("2026-11-05T01:00:05.000Z") });
+    // A phone that asks for the list (it does when the app comes back) gets the current state right away.
+    appendFileSync(join(day, "a.jsonl"), JSON.stringify({ timestamp: "2026-11-05T01:01:00.000Z", type: "event_msg", payload: { type: "task_complete" } }) + "\n");
+    writeFileSync(join(day, "b.jsonl"), log("D:\\work\\brand-new", "task_started"));
+    const mark = phone.mark();
+    phone.send({ type: "sessions.list" });
+    const list = (await phone.waitFor((m) => m.type === "sessions" && m.sessions.some((s) => s.name === "brand-new"), 8000, mark)) as Of<"sessions">;
+    expect(list.sessions.find((s) => s.id === "sole-harbor")).toMatchObject({ status: "idle", terminal: false });
+    expect(list.sessions.find((s) => s.name === "brand-new")).toMatchObject({ status: "working", terminal: true, unlisted: true });
   });
 
   it("prompt -> final answer from the app-server", async () => {

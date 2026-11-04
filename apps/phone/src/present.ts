@@ -103,7 +103,7 @@ export function viewSession(state: AppState, s: SessionInfo, heard: ReadonlySet<
   }
   if (s.status === "working") {
     const last = state.activity[s.id]?.at(-1);
-    const detail = goal ? "Goal: " + goal.objective : last ? activityVerb(last) + " " + last.text : "Codex is on it";
+    const detail = s.terminal ? "In a terminal on your PC" : goal ? "Goal: " + goal.objective : last ? activityVerb(last) + " " + last.text : "Codex is on it";
     const mins = s.since ? Math.floor((now - s.since) / 60_000) : 0;
     const label = mins < 1 ? "Working" : mins < 60 ? "Working for " + mins + " min" : "Working for " + span(mins * 60);
     return { ...base, tone: "lilac", icon: "spinner", label, detail: firstLine(detail) };

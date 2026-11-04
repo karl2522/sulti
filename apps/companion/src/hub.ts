@@ -24,6 +24,8 @@ export interface HubDeps {
   /** Renders speech text to a WAV at outFile. */
   renderAudio: (speechText: string, outFile: string) => Promise<void>;
   copyToPc: (text: string) => Promise<void>;
+  /** Re-read the Codex terminal logs now, so a phone that just opened sees current status. */
+  refreshTerminals?: () => void;
   log?: (msg: string) => void;
 }
 
@@ -57,7 +59,7 @@ export class Hub {
         if (status === "working" && (prev === "idle" || prev === "error") && this.activity.delete(sid)) {
           this.broadcast({ type: "activity", sessionId: sid, items: [] });
         }
-        this.broadcast({ type: "session.status", sessionId: sid, status, since: this.d.registry.since(sid) ?? Date.now() });
+        this.broadcast(this.statusMsg(sid));
       },
       outcome: (sid: string, o: TurnOutcome) => this.onOutcome(sid, o),
       thread: () => this.broadcast(this.sessionsMsg()),
@@ -83,6 +85,30 @@ export class Hub {
     for (const c of this.clients) c.send(msg);
   }
 
+  private statusMsg(sid: string): CompanionMessage {
+    const r = this.d.registry;
+    return { type: "session.status", sessionId: sid, status: r.getStatus(sid), since: r.since(sid) ?? Date.now(), terminal: r.fromTerminal(sid) };
+  }
+
+  /**
+   * Turns running in Codex terminals, by folder. A folder Sulti hasn't seen yet shows up as
+   * soon as its first turn starts, without waiting for the Stop hook at the end.
+   */
+  syncTerminals(turns: Map<string, number>): void {
+    const r = this.d.registry;
+    const running = new Map<string, number>();
+    let added = false;
+    for (const [cwd, at] of turns) {
+      const known = r.findByCwd(cwd);
+      const s = known ?? r.forHookCwd(cwd);
+      added ||= !known;
+      running.set(s.id, Math.min(running.get(s.id) ?? Infinity, at));
+    }
+    const changed = r.list().filter((s) => r.setTerminal(s.id, running.get(s.id) ?? null));
+    if (added) this.broadcast(this.sessionsMsg());
+    else for (const s of changed) this.broadcast(this.statusMsg(s.id));
+  }
+
   /** Ask every open phone to let a new device in. Returns how many phones were asked. */
   askToPair(info: PairRequestInfo): number {
     this.broadcast({ type: "pair.request", ...info });
@@ -91,6 +117,7 @@ export class Hub {
 
   /** Initial state for a freshly authenticated phone. */
   async welcome(c: PhoneClient): Promise<void> {
+    this.d.refreshTerminals?.();
     c.send(this.sessionsMsg());
     // The 20 newest, plus each session's latest so a quiet session still shows its answer.
     const latest = new Map(this.d.answers.recent(MAX_ANSWERS).map((a) => [a.sessionId, a]));
@@ -135,6 +162,7 @@ export class Hub {
       case "auth":
         return; // handled by the server
       case "sessions.list":
+        this.d.refreshTerminals?.();
         return c.send(this.sessionsMsg());
       case "session.select":
         return this.select(this.session(msg.sessionId).id, c);
@@ -174,7 +202,9 @@ export class Hub {
       case "turn.interrupt": {
         const s = this.session(msg.sessionId);
         const ok = !s.unlisted && (await this.bridge.interrupt(s));
-        return c.send({ type: "toast", level: ok ? "info" : "warn", message: ok ? `Stopping ${s.name}.` : `${s.name} has no running turn.` });
+        if (ok) return c.send({ type: "toast", level: "info", message: `Stopping ${s.name}.` });
+        const where = this.d.registry.fromTerminal(s.id) ? " Its turn is running in a terminal on your PC; stop it there." : "";
+        return c.send({ type: "toast", level: "warn", message: `Sulti isn't running a turn in ${s.name}.${where}` });
       }
       case "approval.respond": {
         // The only path that answers an approval: an explicit tap on the phone.

@@ -44,7 +44,7 @@ export interface TestCompanion {
   stop(): Promise<void>;
 }
 
-export async function startTestCompanion(opts: { scenario?: string; mockArgs?: string[]; sessions?: unknown[] } = {}): Promise<TestCompanion> {
+export async function startTestCompanion(opts: { scenario?: string; mockArgs?: string[]; sessions?: unknown[]; codexSessionsDir?: string } = {}): Promise<TestCompanion> {
   const dataDir = mkdtempSync(join(tmpdir(), "sulti-it-"));
   const logFile = join(dataDir, "mock-requests.jsonl");
   writeFileSync(join(dataDir, "sessions.json"), JSON.stringify({ sessions: opts.sessions ?? TEST_SESSIONS }));
@@ -66,6 +66,8 @@ export async function startTestCompanion(opts: { scenario?: string; mockArgs?: s
       writeFileSync(out, fakeWav());
     },
     copyToPc: async (text) => void copied.push(text),
+    // Never the real ~/.codex: tests write their own terminal logs here.
+    codexSessionsDir: opts.codexSessionsDir ?? join(dataDir, "codex-sessions"),
   });
   await c.conn.ready(10_000);
   return {

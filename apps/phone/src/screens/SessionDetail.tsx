@@ -44,7 +44,8 @@ export function SessionDetail({ id }: { id: string }) {
   const activity = state.activity[s.id] ?? [];
   const skills = state.skills[s.id] ?? [];
   const answer = latestAnswer(state, s.id);
-  const busy = s.status === "working" || s.status === "waitingApproval";
+  // A turn in a terminal shows as working, but Sulti's own stop and chat controls stay free.
+  const busy = (s.status === "working" && !s.terminal) || s.status === "waitingApproval";
   const talk = (skill?: string) => navigate("/talk?to=" + encodeURIComponent(s.id) + (skill ? "&skill=" + encodeURIComponent(skill) : ""));
   const [chatTitle, chatDetail] = chatLine(s, state.threads[s.id]);
   let i = 0;
@@ -63,7 +64,10 @@ export function SessionDetail({ id }: { id: string }) {
           ) : s.status === "working" ? (
             <span className="state-chip chip-lilac">
               <Spinner size={14} />
-              <span className="tabular">Working{s.since ? " for " + span((now - s.since) / 1000) : ""}</span>
+              <span className="tabular">
+                Working{s.terminal ? " in a terminal" : ""}
+                {s.since ? " for " + span((now - s.since) / 1000) : ""}
+              </span>
             </span>
           ) : s.status === "error" ? (
             <span className="state-chip chip-coral">Last turn failed</span>

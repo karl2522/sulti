@@ -12,6 +12,7 @@ import { Pairing } from "./pairing.js";
 import { startPhoneServer, type RunningServer } from "./server.js";
 import { SessionRegistry, loadSessions } from "./sessions.js";
 import { ThreadStore, loadSecrets } from "./store.js";
+import { TerminalWatcher, codexSessionsDir } from "./terminals.js";
 
 export interface CompanionHandle {
   config: Config;
@@ -30,6 +31,8 @@ export interface CompanionOverrides {
   renderAudio?: (speechText: string, outFile: string) => Promise<void>;
   copyToPc?: (text: string) => Promise<void>;
   backoff?: number[];
+  /** Codex's session logs folder (default: CODEX_HOME/sessions). */
+  codexSessionsDir?: string;
   log?: (msg: string) => void;
 }
 
@@ -62,9 +65,12 @@ export async function startCompanion(config: Config, o: CompanionOverrides = {})
     signingSecret: secrets.signingSecret,
     renderAudio: o.renderAudio ?? ((text, out) => renderWav(text, out, config.tts)),
     copyToPc: o.copyToPc ?? copyToPcClipboard,
+    refreshTerminals: () => terminals.refresh(),
     log,
   });
   hub.bridge = new CodexBridge(conn, threads, hub.bridgeEvents(), log);
+  const terminals = new TerminalWatcher(o.codexSessionsDir ?? codexSessionsDir(), (turns) => hub.syncTerminals(turns), log);
+  terminals.start();
   // Shared mode: resume up front so turns started in a terminal reach the phone.
   // stdio resumes lazily; resuming every chat at startup would lock chats you
   // may want to continue in a terminal or the Codex app.
@@ -96,6 +102,7 @@ export async function startCompanion(config: Config, o: CompanionOverrides = {})
     publicUrl,
     newPairing,
     async stop() {
+      terminals.stop();
       conn.stop();
       await Promise.all([phone.close(), control.close()]);
     },

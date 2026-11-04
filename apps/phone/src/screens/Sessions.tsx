@@ -44,8 +44,8 @@ export function Sessions() {
           </div>
         ) : (
           <>
-            {needs.length > 0 && <Group title="Needs you" views={needs} offset={0} activeId={state.activeSessionId} />}
-            {others.length > 0 && <Group title={needs.length ? "Other sessions" : "Your sessions"} views={others} offset={needs.length} activeId={state.activeSessionId} />}
+            {needs.length > 0 && <Group title="Needs you" views={needs} offset={0} />}
+            {others.length > 0 && <Group title={needs.length ? "Other sessions" : "Your sessions"} views={others} offset={needs.length} />}
           </>
         )}
       </div>
@@ -62,20 +62,20 @@ export function Sessions() {
   );
 }
 
-function Group({ title, views, offset, activeId }: { title: string; views: SessionView[]; offset: number; activeId: string | null }) {
+function Group({ title, views, offset }: { title: string; views: SessionView[]; offset: number }) {
   return (
     <section className="section">
       <h2 className="section-title">{title}</h2>
       <ul className="group">
         {views.map((v, i) => (
-          <SessionRow key={v.session.id} v={v} i={offset + i} active={v.session.id === activeId} />
+          <SessionRow key={v.session.id} v={v} i={offset + i} />
         ))}
       </ul>
     </section>
   );
 }
 
-function SessionRow({ v, i, active }: { v: SessionView; i: number; active: boolean }) {
+function SessionRow({ v, i }: { v: SessionView; i: number }) {
   const { openSheet } = useApp();
   const { session, answer, approval } = v;
   const ready = v.icon === "speaker" || v.icon === "bars";
@@ -91,7 +91,6 @@ function SessionRow({ v, i, active }: { v: SessionView; i: number; active: boole
         <span className="row-text">
           <span className="row-title">
             <span className="truncate">{session.name}</span>
-            {active && !session.unlisted && <span className="tag">Active</span>}
           </span>
           <StatusLine view={v} />
           <span className={"row-detail truncate" + (v.detailMono ? " mono" : "")}>{v.detail}</span>

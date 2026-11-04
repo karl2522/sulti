@@ -28,7 +28,7 @@ function PickSession({ title, onPick }: { title: string; onPick: (id: string) =>
                   <span className="row-title">{s.name}</span>
                   <span className="row-detail">{STATUS[s.status]}</span>
                 </span>
-                {s.id === state.activeSessionId && <span className="tag">Active</span>}
+                {s.id === state.activeSessionId && <span className="tag">Current</span>}
               </button>
             </li>
           ))}
@@ -71,7 +71,7 @@ function Threads({ sessionId }: { sessionId: string }) {
   const close = useSheetClose();
   const session = state.sessions.find((s) => s.id === sessionId);
   const threads = state.threads[sessionId];
-  const busy = session?.status === "working" || session?.status === "waitingApproval";
+  const busy = (session?.status === "working" && !session.terminal) || session?.status === "waitingApproval";
   useEffect(() => {
     send({ type: "thread.list", sessionId });
   }, [send, sessionId]);

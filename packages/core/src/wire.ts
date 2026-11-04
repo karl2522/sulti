@@ -26,6 +26,8 @@ export const SessionInfo = z.object({
   threadId: z.string().nullable(),
   /** When the current status began (ms since epoch), for "Working for 2 min". */
   since: z.number().nullable().optional(),
+  /** True when the only thing running is a Codex terminal in this folder, not a Sulti turn. */
+  terminal: z.boolean().optional(),
 });
 export type SessionInfo = z.infer<typeof SessionInfo>;
 
@@ -189,7 +191,7 @@ export type ApprovalRequest = z.infer<typeof ApprovalRequest>;
 export const CompanionMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("auth.ok"), deviceId: z.string(), appName: z.string(), version: z.string(), host: z.string().max(100).optional() }),
   z.object({ type: z.literal("sessions"), sessions: z.array(SessionInfo), activeSessionId: z.string().nullable() }),
-  z.object({ type: z.literal("session.status"), sessionId: id, status: SessionStatus, since: z.number().optional() }),
+  z.object({ type: z.literal("session.status"), sessionId: id, status: SessionStatus, since: z.number().optional(), terminal: z.boolean().optional() }),
   z.object({ type: z.literal("activity"), sessionId: id, items: z.array(ActivityItem).max(20) }),
   Answer.extend({ type: z.literal("answer") }),
   z.object({ type: z.literal("route.result"), routeId: id, intent: Intent, echo: z.string(), needsConfirm: z.boolean() }),

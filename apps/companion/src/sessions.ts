@@ -66,7 +66,10 @@ export function loadSessions(dataDir: string): Session[] {
  */
 export class SessionRegistry {
   private readonly sessions = new Map<string, Session>();
+  /** Status of Sulti's own turns (app-server). */
   private readonly status = new Map<string, SessionStatus>();
+  /** Start of a turn running in a Codex terminal in this folder, from Codex's session logs. */
+  private readonly terminal = new Map<string, number>();
   private readonly statusSince = new Map<string, number>();
 
   // ponytail: remembered folders are never dropped; prune by last answer age if the list grows.
@@ -116,25 +119,45 @@ export class SessionRegistry {
     return s;
   }
 
+  /** What the phone sees: Sulti's own turn first, else a terminal turn in the folder. */
   getStatus(id: string): SessionStatus {
-    return this.status.get(id) ?? "idle";
+    const own = this.status.get(id) ?? "idle";
+    return this.fromTerminal(id) ? "working" : own;
   }
 
+  /** Working only because of a Codex terminal, so Sulti's own stop and chat controls don't apply. */
+  fromTerminal(id: string): boolean {
+    const own = this.status.get(id) ?? "idle";
+    return this.terminal.has(id) && own !== "working" && own !== "waitingApproval";
+  }
+
+  /** Sulti's own turn status. Returns true when what the phone sees changed. */
   setStatus(id: string, st: SessionStatus): boolean {
-    if (this.getStatus(id) === st) return false;
-    this.status.set(id, st);
+    return this.change(id, () => this.status.set(id, st));
+  }
+
+  /** A terminal turn started (its start time) or ended (null). Returns true when what the phone sees changed. */
+  setTerminal(id: string, startedAt: number | null): boolean {
+    return this.change(id, () => (startedAt === null ? this.terminal.delete(id) : this.terminal.set(id, startedAt)));
+  }
+
+  private change(id: string, apply: () => void): boolean {
+    const before = this.getStatus(id) + this.fromTerminal(id);
+    apply();
+    if (this.getStatus(id) + this.fromTerminal(id) === before) return false;
     this.statusSince.set(id, Date.now());
     return true;
   }
 
   /** When the current status began, or null if it never changed since startup. */
   since(id: string): number | null {
+    if (this.fromTerminal(id)) return this.terminal.get(id)!;
     return this.statusSince.get(id) ?? null;
   }
 
   info(id: string, threadId: string | null): SessionInfo | null {
     const s = this.sessions.get(id);
     if (!s) return null;
-    return { id: s.id, name: s.name, aliases: s.aliases, status: this.getStatus(id), unlisted: s.unlisted, threadId, since: this.since(id) };
+    return { id: s.id, name: s.name, aliases: s.aliases, status: this.getStatus(id), unlisted: s.unlisted, threadId, since: this.since(id), terminal: this.fromTerminal(id) };
   }
 }

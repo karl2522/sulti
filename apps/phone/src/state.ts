@@ -95,7 +95,7 @@ function onMessage(s: AppState, m: CompanionMessage): AppState {
     case "sessions":
       return { ...s, loaded: true, sessions: m.sessions, activeSessionId: m.activeSessionId };
     case "session.status":
-      return { ...s, sessions: s.sessions.map((x) => (x.id === m.sessionId ? { ...x, status: m.status, since: m.since ?? Date.now() } : x)) };
+      return { ...s, sessions: s.sessions.map((x) => (x.id === m.sessionId ? { ...x, status: m.status, since: m.since ?? Date.now(), terminal: m.terminal ?? false } : x)) };
     case "answer": {
       const { type: _type, ...answer } = m;
       if (s.answers.some((x) => x.id === answer.id)) return s;

@@ -39,6 +39,8 @@ flowchart LR
 - **Sessions the companion runs.** It drives `codex app-server` itself, and `TurnTracker` (`apps/companion/src/turns.ts`) picks the `final_answer` agent message from `item/completed`.
 - **The owner's own terminals.** A Stop hook (`scripts/hooks/stop-hook.mjs`) posts `last_assistant_message`, `cwd` and `turn_id` to the local control port.
 
+**Working status of terminals.** `TerminalWatcher` (`apps/companion/src/terminals.ts`) reads, never writes, Codex's own chat logs in `CODEX_HOME/sessions`. A turn writes `task_started` when it begins and `task_complete` or `turn_aborted` when it ends, so a folder whose last event is `task_started` shows as **Working** (marked as in a terminal) with that turn's start time. A log that stays quiet for 30 minutes counts as over, which covers a terminal closed mid-turn. Subagents and `codex exec` runs are skipped, and a folder Sulti hasn't seen appears as soon as its first turn starts. The watcher follows file changes, re-reads everything every 30 seconds, and again whenever a phone connects or asks for the session list (it does when the app comes back to the foreground). A terminal turn never blocks Sulti's own stop and chat controls for that session.
+
 Answers are deduplicated by turn id, stored in the data folder (capped at 200), and pushed to the phone. The phone reads them aloud in one of two modes:
 
 - **Mode A, phone voice.** Web Speech on the phone, fed as a queue of chunks of at most 250 characters.
