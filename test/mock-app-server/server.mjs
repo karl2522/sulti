@@ -22,6 +22,12 @@ const logFile = opt("log", null);
 const crashAfter = Number(opt("crash-after-turns", "0"));
 const delay = Number(opt("delay", "2"));
 
+const effort = (...names) => names.map((reasoningEffort) => ({ reasoningEffort, description: "" }));
+const MODELS = [
+  { id: "mock-model", model: "mock-model", displayName: "Mock", hidden: false, isDefault: true, supportedReasoningEfforts: effort("low", "medium", "high"), defaultReasoningEffort: "medium" },
+  { id: "mock-fast", model: "mock-fast", displayName: "Mock Fast", hidden: false, isDefault: false, supportedReasoningEfforts: effort("low", "medium"), defaultReasoningEffort: "low" },
+  { id: "mock-hidden", model: "mock-hidden", displayName: "Hidden", hidden: true, isDefault: false, supportedReasoningEfforts: [], defaultReasoningEffort: null },
+];
 const SKILLS = ["execute-plans", "systematic-debugging", "writing-tests"].map((name) => ({
   name,
   description: `Fictional test skill ${name}`,
@@ -141,7 +147,7 @@ async function handleRequest(id, method, params = {}) {
       // Stands in for a thread another Codex process has open.
       if (t.preview.includes("[locked]")) return fail(-32600, `thread ${t.id} already has an active writer`);
       if (t.preview.includes("[broken]")) return fail(-32603, "failed to load thread");
-      return ok({ thread: threadView(t), model: "mock-model", modelProvider: "mock", serviceTier: null, disabledPluginIds: [], cwd: t.cwd, instructionSources: [], approvalPolicy: "on-request", approvalsReviewer: "user", sandbox: { type: "readOnly" }, reasoningEffort: null, collaborationMode: null, turnsBackwardsCursor: null, itemsBackwardsCursor: null });
+      return ok({ thread: threadView(t), model: t.model ?? "mock-model", modelProvider: "mock", serviceTier: null, disabledPluginIds: [], cwd: t.cwd, instructionSources: [], approvalPolicy: "on-request", approvalsReviewer: "user", sandbox: { type: "readOnly" }, reasoningEffort: t.effort ?? "medium", collaborationMode: null, turnsBackwardsCursor: null, itemsBackwardsCursor: null });
     }
     case "thread/fork": {
       const src = threads.get(params.threadId);
@@ -171,6 +177,12 @@ async function handleRequest(id, method, params = {}) {
       if (!t.preview) t.preview = text.slice(0, 80);
       turns.set(turnId, { threadId: t.id, interrupted: false, onInterrupt: null });
       ok({ turn: { id: turnId, rootTurnId: turnId, items: [], itemsView: "notLoaded", status: "inProgress", error: null, startedAt: null, completedAt: null, durationMs: null } });
+      // Like Codex: a model or effort on turn/start sticks to the thread and is announced.
+      if (params.model || params.effort) {
+        t.model = params.model ?? t.model;
+        t.effort = params.effort ?? t.effort;
+        send({ method: "thread/settings/updated", params: { threadId: t.id, threadSettings: { model: t.model ?? "mock-model", effort: t.effort ?? "medium" } } });
+      }
       const vars = { threadId: t.id, turnId, prompt: text, cwd: t.cwd, skillName: skill?.name ?? "", skillPath: skill?.path ?? "", requestId: "", decision: "" };
       void runTurn(t, turnId, scenarioFor(input), vars);
       return;
@@ -220,7 +232,7 @@ async function handleRequest(id, method, params = {}) {
       return send({ method: "thread/goal/cleared", params: { threadId: t.id } });
     }
     case "model/list":
-      return ok({ data: [{ id: "mock-model", model: "mock-model", displayName: "Mock", isDefault: true }], nextCursor: null });
+      return ok({ data: MODELS, nextCursor: null });
     case "windowsSandbox/readiness":
       return ok({ status: "ready" });
     default:

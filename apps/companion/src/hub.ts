@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { route, type ActivityItem, type CompanionMessage, type Goal, type Intent, type PhoneMessage, type ThreadSummary, toSpeechText } from "@sulti/core";
+import { route, type ActivityItem, type CompanionMessage, type Goal, type Intent, type ModelInfo, type PhoneMessage, type ThreadSummary, toSpeechText } from "@sulti/core";
 import type { V2 } from "@sulti/protocol";
 import { upsertActivity } from "./activity.js";
 import { MAX_ANSWERS, type AnswerStore } from "./answers.js";
@@ -33,6 +33,7 @@ export interface HubDeps {
 }
 
 const ROUTE_TTL_MS = 2 * 60 * 1000;
+const MODELS_TTL_MS = 10 * 60 * 1000;
 
 function toGoal(g: V2.ThreadGoal | null): Goal | null {
   if (!g) return null;
@@ -157,6 +158,7 @@ export class Hub {
   private readonly sessionsKnown = new Set<string>();
   /** Each session's last chat list, sent first while a fresh one loads. */
   private readonly chatLists = new Map<string, ThreadSummary[]>();
+  private models: { list: ModelInfo[]; at: number } | null = null;
 
   async handle(c: PhoneClient, msg: PhoneMessage): Promise<void> {
     try {
@@ -248,6 +250,16 @@ export class Hub {
       }
       case "thread.new":
         return this.newChat(c, this.session(msg.sessionId));
+      case "models.list":
+        return c.send({ type: "models", models: await this.modelList() });
+      case "chat.settings": {
+        const s = this.session(msg.sessionId);
+        const m = (await this.modelList()).find((x) => x.id === msg.model);
+        if (!m) throw new Error("That model isn't available in Codex on your PC.");
+        // Unsupported or missing effort falls back to the model's own default.
+        const effort = msg.effort && m.efforts.includes(msg.effort) ? msg.effort : m.defaultEffort;
+        return this.bridge.setNextModel(s, { model: m.id, effort });
+      }
       case "pair.respond": {
         // Like approvals, only an explicit tap on a paired phone lets a new device in.
         const ok = this.d.pairing.respond(msg.requestId, msg.accept);
@@ -382,9 +394,29 @@ export class Hub {
   sessionsMsg(): CompanionMessage {
     const sessions = this.d.registry
       .list()
-      .map((s) => this.d.registry.info(s.id, this.d.threads.get(s.id)))
+      .map((s) => {
+        const info = this.d.registry.info(s.id, this.d.threads.get(s.id));
+        const m = this.bridge?.chatModel(s.id);
+        return info && (m ? { ...info, model: m.model, effort: m.effort, modelPending: m.pending } : info);
+      })
       .filter((x): x is NonNullable<typeof x> => !!x);
     return { type: "sessions", sessions, activeSessionId: this.activeSessionId };
+  }
+
+  /** Codex's model picker list, cached for 10 minutes. */
+  private async modelList(): Promise<ModelInfo[]> {
+    if (this.models && Date.now() - this.models.at < MODELS_TTL_MS) return this.models.list;
+    const list = (await this.bridge.listModels())
+      .filter((m) => !m.hidden)
+      .map((m) => ({
+        id: m.id,
+        name: m.displayName || m.id,
+        efforts: (m.supportedReasoningEfforts ?? []).map((e) => e.reasoningEffort),
+        defaultEffort: m.defaultReasoningEffort ?? null,
+        isDefault: !!m.isDefault,
+      }));
+    this.models = { list, at: Date.now() };
+    return list;
   }
 
   private approvalMsg(a: PendingApproval): CompanionMessage {

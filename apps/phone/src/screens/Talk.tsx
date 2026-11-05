@@ -1,7 +1,7 @@
 import { route, type Intent, type SessionInfo } from "@sulti/core";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useApp } from "../appContext.js";
-import { chatLine, initials } from "../present.js";
+import { chatLine, initials, modelLine } from "../present.js";
 import { back } from "../router.js";
 import { sessionName, type AppState } from "../state.js";
 import { Icon } from "../ui/icons.js";
@@ -50,6 +50,7 @@ export function Talk({ query }: { query: URLSearchParams }) {
   useEffect(() => {
     if (target && !state.skills[target.id] && state.conn === "open") send({ type: "session.select", sessionId: target.id });
     if (target && !state.threads[target.id] && state.conn === "open") send({ type: "thread.list", sessionId: target.id });
+    if (!state.models && state.conn === "open") send({ type: "models.list" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target?.id, state.conn]);
 
@@ -118,6 +119,14 @@ export function Talk({ query }: { query: URLSearchParams }) {
           <button type="button" className="to-btn press" aria-label={"Change chat, currently " + chat} onClick={() => openSheet({ kind: "threads", sessionId: chatSession.id })}>
             <Icon name="chat" size={18} />
             <span className="to-name truncate">{chat}</span>
+            <Icon name="chevronDown" size={18} stroke={2.2} />
+          </button>
+        </div>
+        <div className="to-row">
+          <span className="muted">With</span>
+          <button type="button" className="to-btn press" aria-label={"Change model, currently " + modelLine(chatSession, state.models)} onClick={() => openSheet({ kind: "chatModel", sessionId: chatSession.id })}>
+            <Icon name="settings" size={18} />
+            <span className="to-name truncate">{modelLine(chatSession, state.models)}</span>
             <Icon name="chevronDown" size={18} stroke={2.2} />
           </button>
         </div>

@@ -1,4 +1,4 @@
-import type { ActivityItem, Answer, CompanionMessage, CompanionMessageOf, Goal, PairRequest, SessionInfo, SkillInfo, ThreadSummary } from "@sulti/core";
+import type { ActivityItem, Answer, CompanionMessage, CompanionMessageOf, Goal, ModelInfo, PairRequest, SessionInfo, SkillInfo, ThreadSummary } from "@sulti/core";
 import type { ConnStatus } from "./connection.js";
 
 export type ApprovalCard = CompanionMessageOf<"approval.request"> & { sent?: boolean; receivedAt: number };
@@ -28,6 +28,8 @@ export interface AppState {
   goals: Record<string, Goal | null>;
   threads: Record<string, ThreadSummary[]>;
   activity: Record<string, ActivityItem[]>;
+  /** Codex's models, once asked for. */
+  models: ModelInfo[] | null;
   echo: string | null;
   toasts: Toast[];
   nextToastId: number;
@@ -48,6 +50,7 @@ export const initialState: AppState = {
   goals: {},
   threads: {},
   activity: {},
+  models: null,
   echo: null,
   toasts: [],
   nextToastId: 1,
@@ -119,6 +122,8 @@ function onMessage(s: AppState, m: CompanionMessage): AppState {
     }
     case "pair.resolved":
       return { ...s, pairRequests: s.pairRequests.filter((x) => x.requestId !== m.requestId) };
+    case "models":
+      return { ...s, models: m.models };
     case "threads":
       return { ...s, threads: { ...s.threads, [m.sessionId]: m.threads } };
     case "toast":

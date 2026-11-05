@@ -253,6 +253,34 @@ describe("companion against the mock app-server", () => {
     expect(Object.keys(resume.params).sort()).toEqual(["excludeTurns", "threadId"]);
   });
 
+  it("model and effort per chat: checked against Codex's list, sent with the next turn, then kept", async () => {
+    const { t, phone } = await setup();
+    phone.send({ type: "models.list" });
+    const { models } = (await phone.waitFor("models")) as Of<"models">;
+    expect(models.map((m) => m.id)).toEqual(["mock-model", "mock-fast"]); // hidden ones stay hidden
+    expect(models[1]).toMatchObject({ name: "Mock Fast", efforts: ["low", "medium"], defaultEffort: "low", isDefault: false });
+
+    phone.send({ type: "chat.settings", sessionId: "sole-harbor", model: "gpt-nope", effort: null });
+    await phone.waitFor((m) => m.type === "toast" && /isn't available/.test(m.message));
+
+    // An effort the model doesn't support falls back to its default.
+    phone.send({ type: "chat.settings", sessionId: "sole-harbor", model: "mock-fast", effort: "high" });
+    const pending = (await phone.waitFor((m) => m.type === "sessions" && m.sessions.some((s) => s.id === "sole-harbor" && s.modelPending === true))) as Of<"sessions">;
+    expect(pending.sessions.find((s) => s.id === "sole-harbor")).toMatchObject({ model: "mock-fast", effort: "low" });
+
+    const mark = phone.mark();
+    phone.send({ type: "prompt.send", sessionId: "sole-harbor", text: "Run the tests." });
+    await phone.waitFor("answer", 8000, mark);
+    expect(turnStarts(t)[0]!.params).toMatchObject({ model: "mock-fast", effort: "low" });
+    const kept = (await phone.waitFor((m) => m.type === "sessions" && m.sessions.some((s) => s.id === "sole-harbor" && s.model === "mock-fast" && !s.modelPending), 8000, mark)) as Of<"sessions">;
+    expect(kept.sessions.find((s) => s.id === "sole-harbor")?.effort).toBe("low");
+
+    // The next message doesn't repeat it: Codex already keeps it for the chat.
+    phone.send({ type: "prompt.send", sessionId: "sole-harbor", text: "And again." });
+    await phone.waitFor((m) => m.type === "answer" && turnStarts(t).length === 2);
+    expect(turnStarts(t)[1]!.params).not.toHaveProperty("model");
+  });
+
   it("sends the last chat list at once, then the fresh one", async () => {
     const seed = JSON.stringify([{ id: "thread-old-1", cwd: "D:\\work\\lead-tracker", preview: "Fix the import" }]);
     const { phone } = await setup({ mockArgs: ["--seed", seed] });

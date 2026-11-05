@@ -1116,6 +1116,11 @@ code,
   gap: 12px;
   padding: 0 4px;
 }
+/* "To", "In" and "With" share one column, so the three pickers line up. */
+.to-row > .muted:first-child {
+  flex: none;
+  width: 40px;
+}
 .to-btn {
   display: flex;
   align-items: center;
@@ -1523,6 +1528,17 @@ textarea.field {
   flex-direction: column;
   gap: 16px;
   padding: 4px 20px 24px;
+}
+/* A long list scrolls under the sheet's main button, which stays in reach. */
+.sheet-actions {
+  position: sticky;
+  bottom: -24px;
+  margin: 0 -20px -24px;
+  padding: 12px 20px 24px;
+  background: linear-gradient(transparent, var(--shelf) 16px);
+}
+.sheet-actions .btn {
+  width: 100%;
 }
 .sheet-title {
   font-size: 22px;

@@ -30,8 +30,23 @@ export const SessionInfo = z.object({
   terminal: z.boolean().optional(),
   /** A chat in this folder is open in Codex on the PC (terminal or app). Absent when the PC can't tell. */
   open: z.boolean().optional(),
+  /** The current chat's model and reasoning effort; null until known (a new chat uses Codex's default). */
+  model: z.string().nullable().optional(),
+  effort: z.string().nullable().optional(),
+  /** Picked on the phone; Codex switches with the chat's next message. */
+  modelPending: z.boolean().optional(),
 });
 export type SessionInfo = z.infer<typeof SessionInfo>;
+
+export const ModelInfo = z.object({
+  id,
+  name: z.string(),
+  /** Reasoning efforts this model supports, in Codex's order; empty when it has none. */
+  efforts: z.array(z.string()),
+  defaultEffort: z.string().nullable(),
+  isDefault: z.boolean(),
+});
+export type ModelInfo = z.infer<typeof ModelInfo>;
 
 /** Mirrors the installed Codex `ThreadGoalStatus` (verified in T1). */
 export const GoalStatus = z.enum(["active", "paused", "blocked", "usageLimited", "budgetLimited", "complete"]);
@@ -164,6 +179,9 @@ export const PhoneMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("thread.attach"), sessionId: id, threadId: id }),
   z.object({ type: z.literal("thread.new"), sessionId: id }),
   z.object({ type: z.literal("pair.respond"), requestId: id, accept: z.boolean() }),
+  z.object({ type: z.literal("models.list") }),
+  /** Model and effort for the session's current chat, from its next message on. */
+  z.object({ type: z.literal("chat.settings"), sessionId: id, model: id, effort: z.string().max(40).nullable() }),
 ]);
 export type PhoneMessage = z.infer<typeof PhoneMessage>;
 
@@ -210,6 +228,7 @@ export const CompanionMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("toast"), level: z.enum(["info", "warn", "error"]), message: z.string() }),
   PairRequest.extend({ type: z.literal("pair.request") }),
   z.object({ type: z.literal("pair.resolved"), requestId: id }),
+  z.object({ type: z.literal("models"), models: z.array(ModelInfo) }),
 ]);
 export type CompanionMessage = z.infer<typeof CompanionMessage>;
 

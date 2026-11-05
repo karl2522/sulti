@@ -1,4 +1,4 @@
-import type { ActivityItem, Answer, SessionInfo, ThreadSummary } from "@sulti/core";
+import type { ActivityItem, Answer, ModelInfo, SessionInfo, ThreadSummary } from "@sulti/core";
 import type { AppState, ApprovalCard } from "./state.js";
 
 export type Tone = "coral" | "lagoon" | "lilac" | "muted";
@@ -125,6 +125,27 @@ export function idleLabel(s: SessionInfo): string {
 export function isOpen(s: SessionInfo): boolean | null {
   if (s.open === undefined) return null;
   return s.open || s.status === "working";
+}
+
+const EFFORTS: Record<string, string> = { none: "None", minimal: "Minimal", low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max", ultra: "Ultra" };
+
+/** "xhigh" reads as "Extra high"; unknown efforts are capitalized. */
+export function effortLabel(e: string): string {
+  return EFFORTS[e] ?? e.charAt(0).toUpperCase() + e.slice(1);
+}
+
+/** "anthropic/claude-opus-5-5" reads as "claude-opus-5-5"; the provider shows separately where there's room. */
+export function modelTitle(name: string): string {
+  return name.slice(name.lastIndexOf("/") + 1);
+}
+
+/** What a chat runs on, e.g. "GPT-6-Sol, high effort". A new chat shows Codex's default model. */
+export function modelLine(s: SessionInfo, models: ModelInfo[] | null): string {
+  const id = s.model ?? (s.threadId ? null : (models?.find((m) => m.isDefault)?.id ?? null));
+  if (!id) return "Current model";
+  const name = modelTitle(models?.find((m) => m.id === id)?.name ?? id);
+  const effort = s.model ? s.effort : (models?.find((m) => m.id === id)?.defaultEffort ?? null);
+  return effort ? name + ", " + effortLabel(effort).toLowerCase() + " effort" : name;
 }
 
 /** A chat's line in a chat list. */

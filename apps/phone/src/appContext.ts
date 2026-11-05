@@ -12,6 +12,7 @@ export type SheetSpec =
   | { kind: "pickSession"; title: string; onPick: (sessionId: string) => void }
   | { kind: "skills"; sessionId: string; onPick: (skill: string) => void }
   | { kind: "threads"; sessionId: string }
+  | { kind: "chatModel"; sessionId: string }
   | { kind: "confirm"; echo: string; onAnswer: (accept: boolean) => void }
   | { kind: "copy"; answer: Answer };
 

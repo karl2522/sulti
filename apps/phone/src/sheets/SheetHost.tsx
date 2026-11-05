@@ -6,6 +6,7 @@ import { Icon } from "../ui/icons.js";
 import { Avatar, ChatSkeletonRows } from "../ui/parts.js";
 import { Sheet, useSheetClose } from "../ui/Sheet.js";
 import { ApprovalSheet } from "./Approval.js";
+import { ChatModelSheet } from "./ChatModel.js";
 import { PairRequestSheet } from "./PairRequest.js";
 import { SettingsSheet } from "./Settings.js";
 
@@ -160,6 +161,7 @@ const LABEL: Record<SheetSpec["kind"], string> = {
   pickSession: "Choose a session",
   skills: "Skills",
   threads: "Chats",
+  chatModel: "Model",
   confirm: "Confirm",
   copy: "Copy",
 };
@@ -176,6 +178,7 @@ export function SheetHost() {
       {sheet.kind === "pickSession" && <PickSession title={sheet.title} onPick={sheet.onPick} />}
       {sheet.kind === "skills" && <Skills sessionId={sheet.sessionId} onPick={sheet.onPick} />}
       {sheet.kind === "threads" && <Threads sessionId={sheet.sessionId} />}
+      {sheet.kind === "chatModel" && <ChatModelSheet sessionId={sheet.sessionId} />}
       {sheet.kind === "confirm" && <Confirm echo={sheet.echo} onAnswer={sheet.onAnswer} />}
       {sheet.kind === "copy" && <Copy answer={sheet.answer} />}
     </Sheet>

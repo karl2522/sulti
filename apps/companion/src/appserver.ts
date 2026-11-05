@@ -11,6 +11,11 @@ import { TurnTracker, type TurnOutcome } from "./turns.js";
 
 export type Logger = (msg: string) => void;
 
+export interface ChatModel {
+  model: string;
+  effort: string | null;
+}
+
 /**
  * Settings for a chat Sulti starts. sessions.json sets them for its folders; any other folder
  * gets the owner's Codex defaults, the same as running codex there.
@@ -215,6 +220,10 @@ export class CodexBridge {
   private readonly ownTurns = new Map<string, string>();
   /** Per-session queue: chat changes run one at a time, in the order they were asked for. */
   private readonly queues = new Map<string, Promise<unknown>>();
+  /** Each chat's model and effort, as Codex last reported them: threadId -> settings. */
+  private readonly chatModels = new Map<string, ChatModel>();
+  /** Picked on the phone for a session's chat; sent with its next turn: sessionId -> settings. */
+  private readonly nextModel = new Map<string, ChatModel>();
   private seq = 0;
 
   constructor(
@@ -304,6 +313,7 @@ export class CodexBridge {
     }
     const client = await this.conn.ready();
     const res = await client.request("thread/start", newChatParams(s));
+    this.chatModels.set(res.thread.id, { model: res.model, effort: res.reasoningEffort });
     this.use(s, res.thread.id);
     return res.thread.id;
   }
@@ -315,6 +325,8 @@ export class CodexBridge {
    * own app-server), Codex refuses with "active writer"; continue a copy instead.
    */
   attachThread(s: Session, threadId: string): Promise<string> {
+    // A model picked for the previous chat doesn't follow the switch.
+    this.nextModel.delete(s.id);
     return this.serial(s.id, () => this.attachNow(s, threadId));
   }
 
@@ -322,23 +334,50 @@ export class CodexBridge {
     const client = await this.conn.ready();
     let id = threadId;
     try {
-      await client.request("thread/resume", { threadId, excludeTurns: true });
+      const res = await client.request("thread/resume", { threadId, excludeTurns: true });
+      this.chatModels.set(threadId, { model: res.model, effort: res.reasoningEffort });
     } catch (err) {
       if (!/active writer/i.test((err as Error).message)) throw err;
-      id = (await client.request("thread/fork", { threadId, ...newChatParams(s), excludeTurns: true })).thread.id;
+      const res = await client.request("thread/fork", { threadId, ...newChatParams(s), excludeTurns: true });
+      id = res.thread.id;
+      this.chatModels.set(id, { model: res.model, effort: res.reasoningEffort });
       this.events.toast("info", `That chat is open in Codex on your PC, so ${s.name} continues a copy of it.`);
     }
-    this.use(s, id);
+    this.use(s, id, true);
     return id;
   }
 
-  private use(s: Session, threadId: string): void {
+  /** Point the session at a thread. `announce` re-sends the session even when it didn't move (its model is now known). */
+  private use(s: Session, threadId: string, announce = false): void {
     this.bind(s.id, threadId);
     const old = this.threads.get(s.id);
-    if (old === threadId) return;
+    if (old === threadId) {
+      if (announce) this.events.thread(s.id);
+      return;
+    }
     if (old) this.threadToSession.delete(old);
     this.threads.set(s.id, threadId);
     this.events.thread(s.id);
+  }
+
+  /** Model and effort for the session's current chat; `pending` when picked but not yet sent. */
+  chatModel(sessionId: string): (ChatModel & { pending: boolean }) | null {
+    const next = this.nextModel.get(sessionId);
+    if (next) return { ...next, pending: true };
+    const threadId = this.threads.get(sessionId);
+    const known = threadId ? this.chatModels.get(threadId) : undefined;
+    return known ? { ...known, pending: false } : null;
+  }
+
+  /** Use this model and effort from the session chat's next turn on (Codex keeps them after that). */
+  setNextModel(s: Session, m: ChatModel): void {
+    this.nextModel.set(s.id, m);
+    this.events.thread(s.id);
+  }
+
+  async listModels(): Promise<V2.Model[]> {
+    const client = await this.conn.ready();
+    return (await client.request("model/list", {})).data;
   }
 
   async listThreads(s: Session): Promise<V2.Thread[]> {
@@ -349,6 +388,7 @@ export class CodexBridge {
 
   /** Forget the session's thread so its next prompt starts a fresh one. */
   newThread(s: Session): Promise<void> {
+    this.nextModel.delete(s.id);
     return this.serial(s.id, async () => {
       if (this.isBusy(s.id)) throw new Error(`${s.name} is still working. Stop the turn first.`);
       const old = this.threads.get(s.id);
@@ -371,7 +411,14 @@ export class CodexBridge {
         if (!/no active turn|expected active turn/i.test((err as Error).message)) throw err;
       }
     }
-    const res = await client.request("turn/start", { threadId, input });
+    // A model picked on the phone rides on the next new turn (a steer can't change it).
+    const next = this.nextModel.get(s.id);
+    const res = await client.request("turn/start", { threadId, input, ...(next ? { model: next.model, ...(next.effort ? { effort: next.effort } : {}) } : {}) });
+    if (next) {
+      this.nextModel.delete(s.id);
+      this.chatModels.set(threadId, next);
+      this.events.thread(s.id);
+    }
     this.activeTurn.set(threadId, res.turn.id);
     this.ownTurn(res.turn.id, s.id);
     this.events.status(s.id, "working");
@@ -499,6 +546,13 @@ export class CodexBridge {
       case "thread/goal/cleared":
         if (sid) this.events.goal(sid, null);
         break;
+      case "thread/settings/updated": {
+        // Also covers a model changed in a terminal on the same chat.
+        const ts = p.threadSettings as { model?: string; effort?: string | null } | undefined;
+        if (threadId && ts?.model) this.chatModels.set(threadId, { model: ts.model, effort: ts.effort ?? null });
+        if (sid) this.events.thread(sid);
+        break;
+      }
       default:
         break;
     }
