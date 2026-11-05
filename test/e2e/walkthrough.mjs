@@ -237,30 +237,30 @@ await step("failed turn", async () => {
 
 await step("chats new chat and /new", async () => {
   await go("/s/sole-harbor");
-  await page.getByRole("button", { name: /^Chat:/ }).click();
-  await page.getByRole("heading", { name: "Chats" }).waitFor();
-  await page.locator(".sheet").getByRole("button", { name: /New chat/ }).click();
-  await page.getByRole("button", { name: /^Chat: New chat/ }).waitFor();
-  await go("/talk?to=sole-harbor");
+  // New chat opens Talk aimed at the fresh chat.
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await page.getByRole("button", { name: "Change chat, currently New chat" }).waitFor();
   await page.getByLabel("Message").fill("/new check the docs");
   await page.getByText("Start a new chat").waitFor();
   await page.getByRole("button", { name: /^Send to/ }).click();
   await page.waitForURL((u) => !u.pathname.startsWith("/talk"), { timeout: 5000 });
   await go("/s/sole-harbor");
-  await page.getByRole("button", { name: /^Chat: Check the docs|^Chat: check the docs/ }).waitFor({ timeout: 15000 });
+  await page.getByRole("button", { name: /^Chat: check the docs.*, current$/i }).waitFor({ timeout: 15000 });
 });
 
 await step("switch chats", async () => {
-  await page.getByRole("button", { name: /^Chat:/ }).click();
-  const older = page.locator(".sheet li.row").filter({ hasText: /Run the tests/i }).first();
-  await older.click();
-  await page.getByRole("button", { name: /^Chat: Run the tests/i }).waitFor({ timeout: 10000 });
+  // Tapping an older chat continues it: Talk opens aimed at that chat.
+  await page.getByRole("button", { name: /^Chat: Run the tests/i }).first().click();
+  await page.getByRole("button", { name: /^Change chat, currently Run the tests/i }).waitFor({ timeout: 10000 });
+  await go("/s/sole-harbor");
+  await page.getByRole("button", { name: /^Chat: Run the tests.*, current$/i }).waitFor({ timeout: 10000 });
 });
 
 await step("voice switch and unclear switch", async () => {
   await talk("sole-harbor", "switch to colonel labs");
+  // A switch opens that session's page.
+  await page.waitForURL((u) => u.pathname === "/s/kernel-labs", { timeout: 5000 });
   await home();
-  await page.getByRole("button", { name: "Talk to Kernel Labs" }).waitFor({ timeout: 5000 });
   await talk("kernel-labs", "switch to bananas");
   await page.getByRole("heading", { name: /Which session\?/ }).waitFor();
   await page.keyboard.press("Escape");
@@ -273,9 +273,10 @@ await step("stop hook from a terminal", async () => {
   await home();
   await row("demo-app").getByText("Answer ready").waitFor({ timeout: 5000 });
   await go("/s/unlisted-demo-app");
-  // No Codex chat is open in that folder, so it reads as not open and lists its chats.
+  // No Codex chat is open in that folder, so it reads as not open; it can still be talked to.
   await page.locator(".state-chip").getByText("Not open").waitFor();
-  await page.getByRole("heading", { name: "Chats in this folder" }).waitFor();
+  await page.getByRole("heading", { name: "Chats" }).waitFor();
+  await page.getByRole("button", { name: "Talk", exact: true }).waitFor();
 });
 
 await step("restart companion and reconnect", async () => {

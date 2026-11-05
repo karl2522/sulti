@@ -185,30 +185,30 @@ export class Hub {
       case "prompt.send":
         return this.prompt(c, msg.sessionId, msg.text);
       case "skill.invoke": {
-        const s = this.promptable(msg.sessionId);
+        const s = this.session(msg.sessionId);
         await this.bridge.invokeSkill(s, msg.skill, msg.text);
         return c.send({ type: "toast", level: "info", message: `Sent $${msg.skill} to ${s.name}.` });
       }
       case "goal.get": {
-        const s = this.promptable(msg.sessionId);
+        const s = this.session(msg.sessionId);
         return c.send({ type: "goal", sessionId: s.id, goal: toGoal(await this.bridge.getGoal(s)) });
       }
       case "goal.set": {
-        const s = this.promptable(msg.sessionId);
+        const s = this.session(msg.sessionId);
         return this.broadcast({ type: "goal", sessionId: s.id, goal: toGoal(await this.bridge.setGoal(s, msg.objective)) });
       }
       case "goal.update": {
-        const s = this.promptable(msg.sessionId);
+        const s = this.session(msg.sessionId);
         return this.broadcast({ type: "goal", sessionId: s.id, goal: toGoal(await this.bridge.updateGoal(s, msg.status)) });
       }
       case "goal.clear": {
-        const s = this.promptable(msg.sessionId);
+        const s = this.session(msg.sessionId);
         await this.bridge.clearGoal(s);
         return this.broadcast({ type: "goal", sessionId: s.id, goal: null });
       }
       case "turn.interrupt": {
         const s = this.session(msg.sessionId);
-        const ok = !s.unlisted && (await this.bridge.interrupt(s));
+        const ok = await this.bridge.interrupt(s);
         if (ok) return c.send({ type: "toast", level: "info", message: `Stopping ${s.name}.` });
         const where = this.d.registry.fromTerminal(s.id) ? " Its turn is running in a terminal on your PC; stop it there." : "";
         return c.send({ type: "toast", level: "warn", message: `Sulti isn't running a turn in ${s.name}.${where}` });
@@ -228,7 +228,6 @@ export class Hub {
       case "answer.audioUrl":
         return this.audioUrl(c, msg.answerId);
       case "thread.list": {
-        // Read only, so listen-only folders get their chat list too.
         const s = this.session(msg.sessionId);
         const threads = await this.bridge.listThreads(s);
         return c.send({
@@ -238,14 +237,14 @@ export class Hub {
         });
       }
       case "thread.attach": {
-        const s = this.promptable(msg.sessionId);
+        const s = this.session(msg.sessionId);
         if (this.bridge.isBusy(s.id)) throw new Error(`${s.name} is still working. Stop the turn first.`);
         await this.bridge.attachThread(s, msg.threadId);
         this.broadcast({ type: "goal", sessionId: s.id, goal: toGoal(await this.bridge.getGoal(s)) });
         return;
       }
       case "thread.new":
-        return this.newChat(c, this.promptable(msg.sessionId));
+        return this.newChat(c, this.session(msg.sessionId));
       case "pair.respond": {
         // Like approvals, only an explicit tap on a paired phone lets a new device in.
         const ok = this.d.pairing.respond(msg.requestId, msg.accept);
@@ -268,9 +267,9 @@ export class Hub {
   private async onUtterance(c: PhoneClient, text: string, sessionId?: string): Promise<void> {
     const active = sessionId && this.d.registry.get(sessionId) ? sessionId : this.activeSessionId;
     const activeSession = active ? this.d.registry.get(active) : undefined;
-    const skills = activeSession && !activeSession.unlisted ? await this.bridge.skills(activeSession).catch(() => []) : [];
+    const skills = activeSession ? await this.bridge.skills(activeSession).catch(() => []) : [];
     const out = route(text, {
-      sessions: this.d.registry.list().filter((s) => !s.unlisted),
+      sessions: this.d.registry.list(),
       skills,
       activeSessionId: active ?? null,
     });
@@ -293,7 +292,7 @@ export class Hub {
       return;
     }
     if (intent.kind === "prompt") return this.prompt(c, intent.sessionId, intent.text);
-    const s = this.promptable(intent.sessionId);
+    const s = this.session(intent.sessionId);
     const a = intent.action;
     switch (a.type) {
       case "skill":
@@ -316,7 +315,7 @@ export class Hub {
   }
 
   private async prompt(_c: PhoneClient, sessionId: string, text: string): Promise<void> {
-    const s = this.promptable(sessionId);
+    const s = this.session(sessionId);
     // Always a Codex prompt. Sulti never runs shell commands itself.
     await this.bridge.sendPrompt(s, text);
   }
@@ -329,7 +328,7 @@ export class Hub {
 
   private async sendSessionDetails(c: PhoneClient, sessionId: string): Promise<void> {
     const s = this.d.registry.get(sessionId);
-    if (!s || s.unlisted) return;
+    if (!s) return;
     try {
       const skills = await this.bridge.skills(s);
       c.send({ type: "skills", sessionId: s.id, skills: skills.map((k) => ({ name: k.name, description: k.shortDescription ?? k.description ?? "", path: k.path })) });
@@ -377,13 +376,6 @@ export class Hub {
     return s;
   }
 
-  /** Sessions that can receive prompts: configured ones only. */
-  private promptable(id: string): Session {
-    const s = this.session(id);
-    if (s.unlisted) throw new Error(`${s.name} isn't in sessions.json yet, so Sulti can only listen to it.`);
-    return s;
-  }
-
   sessionsMsg(): CompanionMessage {
     const sessions = this.d.registry
       .list()
@@ -405,3 +397,4 @@ export class Hub {
     };
   }
 }
+

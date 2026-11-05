@@ -1,7 +1,7 @@
 import type { ActivityItem, Goal, SessionInfo, ThreadSummary } from "@sulti/core";
 import { useEffect, useState } from "react";
 import { useApp } from "../appContext.js";
-import { activityVerb, ago, chatLine, chatState, firstLine, idleLabel, span } from "../present.js";
+import { activityVerb, ago, chatState, firstLine, idleLabel, span } from "../present.js";
 import { navigate } from "../router.js";
 import { latestAnswer } from "../state.js";
 import { AnswerControls } from "../ui/AnswerControls.js";
@@ -10,35 +10,62 @@ import { Dock, nth, PageHeader, useNow } from "../ui/parts.js";
 
 const ACTIVITY_ICON: Record<ActivityItem["kind"], IconName> = { read: "file", search: "search", list: "folder", command: "terminal", edit: "pencil" };
 const SKILLS_SHOWN = 5;
-const FOLDER_CHATS_SHOWN = 8;
+const CHATS_SHOWN = 6;
 
-/** A listen-only folder's chats, newest first, marked when open or working in Codex on the PC. */
-function FolderChats({ threads, i }: { threads: ThreadSummary[] | undefined; i: number }) {
+/** A session's chats, newest first: tap one to talk in it, or start a new one. */
+function Chats({ s, busy, i }: { s: SessionInfo; busy: boolean; i: number }) {
+  const { state, send, openSheet } = useApp();
+  const threads = state.threads[s.id];
+  // Point the session at the chat (the server queues it before the next message), then talk.
+  const open = (threadId: string | null) => {
+    const ok = threadId === null ? !s.threadId || send({ type: "thread.new", sessionId: s.id }) : threadId === s.threadId || send({ type: "thread.attach", sessionId: s.id, threadId });
+    if (ok) navigate("/talk?to=" + encodeURIComponent(s.id));
+  };
+  const rank = (t: ThreadSummary) => (t.id === s.threadId ? 3 : t.working ? 2 : t.open ? 1 : 0);
+  const shown = [...(threads ?? [])].sort((a, b) => rank(b) - rank(a) || b.updatedAt - a.updatedAt).slice(0, CHATS_SHOWN);
   return (
-    <section className="section stagger" style={nth(i)} aria-label="Chats in this folder">
-      <h2 className="section-title">Chats in this folder</h2>
-      {!threads ? (
-        <span className="sk sk-line" aria-label="Loading chats" />
-      ) : !threads.length ? (
-        <p className="muted">No chats here yet.</p>
-      ) : (
-        <ul className="group">
-          {[...threads]
-            .sort((a, b) => Number(!!b.working) - Number(!!a.working) || Number(!!b.open) - Number(!!a.open) || b.updatedAt - a.updatedAt)
-            .slice(0, FOLDER_CHATS_SHOWN)
-            .map((t) => (
+    <section className="section stagger" style={nth(i)} aria-label="Chats">
+      <h2 className="section-title">Chats</h2>
+      <ul className="group">
+        <li className="row">
+          <button type="button" className="row-main press-row" disabled={busy && !!s.threadId} aria-label={"New chat" + (s.threadId ? "" : ", current")} onClick={() => open(null)}>
+            <Icon name="plus" size={20} stroke={2.2} />
+            <span className="row-text">
+              <span className="row-title">New chat</span>
+              <span className="row-detail">{!s.threadId ? "Current. Your next message starts it" : busy ? "Stop the turn first" : "Start fresh in this folder"}</span>
+            </span>
+            {!s.threadId && <Icon name="check" size={20} />}
+          </button>
+        </li>
+        {!threads ? (
+          <li className="row">
+            <span className="sk sk-line" aria-label="Loading chats" />
+          </li>
+        ) : (
+          shown.map((t) => {
+            const current = t.id === s.threadId;
+            const title = t.name ?? firstLine(t.preview || "Untitled chat", 120);
+            return (
               <li key={t.id} className="row">
-                <div className="row-main">
+                <button type="button" className="row-main press-row" disabled={busy && !current} aria-label={"Chat: " + title + (current ? ", current" : "")} onClick={() => open(t.id)}>
                   {t.working ? <Spinner size={18} /> : <Icon name="chat" size={20} />}
                   <span className="row-text">
-                    <span className="row-title clamp-2">{t.name ?? firstLine(t.preview || "Untitled chat", 120)}</span>
-                    <span className={"row-detail" + (t.working || t.open ? " tone-" + (t.working ? "lilac" : "lagoon") : "")}>{chatState(t)}</span>
+                    <span className="row-title clamp-2">{title}</span>
+                    <span className={"row-detail" + (t.working ? " tone-lilac" : t.open ? " tone-lagoon" : "")}>{(current ? "Current. " : "") + chatState(t)}</span>
                   </span>
-                </div>
+                  {current ? <Icon name="check" size={20} /> : <Icon name="chevronRight" size={18} stroke={2.2} />}
+                </button>
               </li>
-            ))}
-        </ul>
+            );
+          })
+        )}
+      </ul>
+      {threads && threads.length > CHATS_SHOWN && (
+        <button type="button" className="link-btn press" onClick={() => openSheet({ kind: "threads", sessionId: s.id })}>
+          Show all {threads.length} chats
+        </button>
       )}
+      {s.unlisted && <p className="fine">This folder isn't in sessions.json, so a new chat here uses your usual Codex settings. A chat you continue keeps its own.</p>}
     </section>
   );
 }
@@ -50,7 +77,7 @@ export function SessionDetail({ id }: { id: string }) {
 
   // Opening a session makes it the active one: its skills and goal load, and Talk goes to it.
   useEffect(() => {
-    if (s && !s.unlisted && state.conn === "open" && state.activeSessionId !== s.id) send({ type: "session.select", sessionId: s.id });
+    if (s && state.conn === "open" && state.activeSessionId !== s.id) send({ type: "session.select", sessionId: s.id });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s?.id, state.conn]);
   // The chat list names the current chat; refresh it when the session moves to another chat.
@@ -65,7 +92,7 @@ export function SessionDetail({ id }: { id: string }) {
         <PageHeader title="Session" />
         <div className="scroll">
           <div className="empty" role="status">
-            <h2>{state.loaded ? "No session called " + id : "Loading…"}</h2>
+            <h2>{state.loaded ? "No session called " + id : "Loadingâ€¦"}</h2>
           </div>
         </div>
       </>
@@ -79,13 +106,12 @@ export function SessionDetail({ id }: { id: string }) {
   // A turn in a terminal shows as working, but Sulti's own stop and chat controls stay free.
   const busy = (s.status === "working" && !s.terminal) || s.status === "waitingApproval";
   const talk = (skill?: string) => navigate("/talk?to=" + encodeURIComponent(s.id) + (skill ? "&skill=" + encodeURIComponent(skill) : ""));
-  const [chatTitle, chatDetail] = chatLine(s, state.threads[s.id]);
   let i = 0;
 
   return (
     <>
       <PageHeader title={s.name} subtitle={s.id} mono />
-      <div className={"scroll" + (s.unlisted ? "" : " with-dock")}>
+      <div className="scroll with-dock">
         <div className="chip-row">
           {approval ? (
             <button type="button" className="state-chip chip-coral press" onClick={() => openSheet({ kind: "approval", requestId: approval.requestId })}>
@@ -108,37 +134,8 @@ export function SessionDetail({ id }: { id: string }) {
           )}
         </div>
 
-        {s.unlisted && <p className="lead">This folder isn't in sessions.json, so Sulti reads its answers but can't send it prompts. Add the folder there to talk to it.</p>}
-        {s.unlisted && <FolderChats threads={state.threads[s.id]} i={i++} />}
-        {!s.unlisted && (
-          <section className="section stagger" style={nth(i++)} aria-label="Chat">
-            <h2 className="section-title">Chat</h2>
-            <ul className="group">
-              <li className="row">
-                <button type="button" className="row-main press-row" aria-label={"Chat: " + chatTitle + ". Switch chats"} onClick={() => openSheet({ kind: "threads", sessionId: s.id })}>
-                  <Icon name="chat" size={20} />
-                  <span className="row-text">
-                    <span className="row-title clamp-2">{chatTitle}</span>
-                    <span className="row-detail">{chatDetail}</span>
-                  </span>
-                  <Icon name="chevronRight" size={18} stroke={2.2} />
-                </button>
-              </li>
-              {s.threadId && (
-                <li className="row">
-                  <button type="button" className="row-main press-row" disabled={busy} onClick={() => send({ type: "thread.new", sessionId: s.id })}>
-                    <Icon name="plus" size={20} stroke={2.2} />
-                    <span className="row-text">
-                      <span className="row-title">New chat</span>
-                      <span className="row-detail">{busy ? "Stop the turn first" : "Or type /new in a message"}</span>
-                    </span>
-                  </button>
-                </li>
-              )}
-            </ul>
-          </section>
-        )}
-        {!s.unlisted && <GoalCard s={s} goal={state.goals[s.id]} i={i++} />}
+        <Chats s={s} busy={busy} i={i++} />
+        <GoalCard s={s} goal={state.goals[s.id]} i={i++} />
 
         {answer && (
           <section className="section stagger" style={nth(i++)}>
@@ -174,7 +171,7 @@ export function SessionDetail({ id }: { id: string }) {
           </section>
         )}
 
-        {!s.unlisted && skills.length > 0 && (
+        {skills.length > 0 && (
           <section className="section stagger" style={nth(i++)}>
             <h2 className="section-title">Skills in this project</h2>
             <ul className="group">
@@ -199,20 +196,18 @@ export function SessionDetail({ id }: { id: string }) {
         )}
       </div>
 
-      {!s.unlisted && (
-        <Dock className={busy ? "dock-split" : ""}>
-          {busy && (
-            <button type="button" className="btn btn-outline btn-dock press" onClick={() => send({ type: "turn.interrupt", sessionId: s.id })}>
-              <Icon name="stop" size={18} stroke={2.2} />
-              <span>Stop turn</span>
-            </button>
-          )}
-          <button type="button" className="btn btn-primary btn-dock press" onClick={() => talk()}>
-            <Icon name="mic" size={20} stroke={2.2} />
-            <span>Talk</span>
+      <Dock className={busy ? "dock-split" : ""}>
+        {busy && (
+          <button type="button" className="btn btn-outline btn-dock press" onClick={() => send({ type: "turn.interrupt", sessionId: s.id })}>
+            <Icon name="stop" size={18} stroke={2.2} />
+            <span>Stop turn</span>
           </button>
-        </Dock>
-      )}
+        )}
+        <button type="button" className="btn btn-primary btn-dock press" onClick={() => talk()}>
+          <Icon name="mic" size={20} stroke={2.2} />
+          <span>Talk</span>
+        </button>
+      </Dock>
     </>
   );
 }
@@ -305,3 +300,4 @@ function GoalCard({ s, goal, i }: { s: SessionInfo; goal: Goal | null | undefine
     </section>
   );
 }
+

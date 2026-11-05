@@ -39,7 +39,7 @@ function heardAs(state: AppState, intent: Intent, text: string): string | null {
 
 export function Talk({ query }: { query: URLSearchParams }) {
   const { state, send, openSheet } = useApp();
-  const listed = useMemo(() => state.sessions.filter((s) => !s.unlisted), [state.sessions]);
+  const listed = state.sessions;
   const [to, setTo] = useState(() => query.get("to") ?? state.activeSessionId ?? "");
   const [skill, setSkill] = useState<string | null>(() => query.get("skill"));
   const [text, setText] = useState("");
@@ -64,7 +64,7 @@ export function Talk({ query }: { query: URLSearchParams }) {
         <div className="scroll">
           <div className="empty" role="status">
             <h2>No session to talk to</h2>
-            <p>List a project in sessions.json on your PC to send it prompts.</p>
+            <p>Open a Codex chat in a project folder on your PC, or list one in sessions.json. It shows up here.</p>
           </div>
         </div>
       </>
@@ -112,6 +112,14 @@ export function Talk({ query }: { query: URLSearchParams }) {
             <Icon name="chevronDown" size={18} stroke={2.2} />
           </button>
           <span className="to-status">{STATUS[target.status]}</span>
+        </div>
+        <div className="to-row">
+          <span className="muted">In</span>
+          <button type="button" className="to-btn press" aria-label={"Change chat, currently " + chat} onClick={() => openSheet({ kind: "threads", sessionId: chatSession.id })}>
+            <Icon name="chat" size={18} />
+            <span className="to-name truncate">{chat}</span>
+            <Icon name="chevronDown" size={18} stroke={2.2} />
+          </button>
         </div>
         <label className="sr-only" htmlFor="talk-message">
           Message

@@ -11,6 +11,14 @@ import { TurnTracker, type TurnOutcome } from "./turns.js";
 
 export type Logger = (msg: string) => void;
 
+/**
+ * Settings for a chat Sulti starts. sessions.json sets them for its folders; any other folder
+ * gets the owner's Codex defaults, the same as running codex there.
+ */
+function newChatParams(s: Session): { cwd: string; sandbox?: Session["sandbox"]; approvalPolicy?: Session["approvalPolicy"] } {
+  return s.unlisted ? { cwd: s.cwd } : { cwd: s.cwd, sandbox: s.sandbox, approvalPolicy: s.approvalPolicy };
+}
+
 export interface ConnectionOptions {
   mode: "auto" | "stdio" | "shared";
   /** Override for tests: [file, ...args]. Default: codex app-server. */
@@ -295,7 +303,7 @@ export class CodexBridge {
       }
     }
     const client = await this.conn.ready();
-    const res = await client.request("thread/start", { cwd: s.cwd, sandbox: s.sandbox, approvalPolicy: s.approvalPolicy });
+    const res = await client.request("thread/start", newChatParams(s));
     this.use(s, res.thread.id);
     return res.thread.id;
   }
@@ -317,7 +325,7 @@ export class CodexBridge {
       await client.request("thread/resume", { threadId, excludeTurns: true });
     } catch (err) {
       if (!/active writer/i.test((err as Error).message)) throw err;
-      id = (await client.request("thread/fork", { threadId, cwd: s.cwd, sandbox: s.sandbox, approvalPolicy: s.approvalPolicy, excludeTurns: true })).thread.id;
+      id = (await client.request("thread/fork", { threadId, ...newChatParams(s), excludeTurns: true })).thread.id;
       this.events.toast("info", `That chat is open in Codex on your PC, so ${s.name} continues a copy of it.`);
     }
     this.use(s, id);

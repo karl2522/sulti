@@ -18,9 +18,7 @@ function PickSession({ title, onPick }: { title: string; onPick: (id: string) =>
     <div className="sheet-body">
       <h2 className="sheet-title">{title}</h2>
       <ul className="group">
-        {state.sessions
-          .filter((s) => !s.unlisted)
-          .map((s) => (
+        {state.sessions.map((s) => (
             <li key={s.id} className="row">
               <button type="button" className="row-main press-row" onClick={() => (onPick(s.id), close())}>
                 <Avatar session={s} />

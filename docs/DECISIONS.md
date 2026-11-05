@@ -74,7 +74,7 @@ One short entry per non-obvious choice: decision, reason, alternative considered
 - **Reason:** every client attached to a shared server receives every server request. The TUI that owns the thread must be the one that answers. Declining from the companion would cancel the owner's action at the keyboard.
 - **Alternative:** forward every approval to the phone, which races with the terminal.
 
-## D12. Unlisted sessions are listen-only
+## D12. Unlisted sessions are listen-only (superseded by D23)
 
 - **Decision:** a Stop-hook answer from a folder not in `sessions.json` creates an "unlisted" session named after the folder. The phone shows its answers, but hides the composer, skills, goal and Stop, and the hub refuses prompts to it.
 - **Reason:** the owner explicitly chooses which projects can be driven from the phone. Listening is harmless; sending is not.
@@ -139,3 +139,9 @@ One short entry per non-obvious choice: decision, reason, alternative considered
 - **Decision:** the companion stays on the PC and a dashboard-managed Cloudflare Tunnel publishes only port 7417 at `https://trysulti.jaredomen.com`. `cloudflared` runs as a Windows service; the companion runs at logon through a scheduled task with a restart loop. Pairing failures are limited per visitor (`CF-Connecting-IP`), HSTS is sent on HTTPS, and a background companion never logs pairing codes. Steps are in `docs/DEPLOY.md`.
 - **Reason:** Sulti has to sit next to Codex, so there's nothing to host elsewhere. A tunnel gives a stable HTTPS name with no open router ports and no app on the phone, and Cloudflare compresses and caches the static files at the edge. The domain's DNS has to move from Vercel to Cloudflare for a tunnel hostname, which is free; a partial (CNAME) setup would need a Business plan.
 - **Alternative:** Tailscale Serve, which keeps traffic on the tailnet but needs the Tailscale app on every phone; or hosting the phone app on Cloudflare Pages, which adds a cross-origin setup and still needs the tunnel to reach the PC.
+
+## D23. Every folder can be talked to, per session and per chat
+
+- **Decision:** the companion joins the Codex app-server daemon that terminals share, so a chat open in a terminal is continued as the same chat. Unlisted folders take prompts like listed ones: a continued chat keeps its own folder, sandbox and approvals; a new chat in an unlisted folder gets the owner's Codex defaults. The phone has no general Talk button; a session's page lists its chats, and tapping one opens Talk aimed at that chat. A voice switch opens the session's page.
+- **Reason:** D12 protected chats from Sulti's own sandbox settings, which reopening used to apply. Reopening now sends only the chat id, so nothing about a chat changes by talking to it from the phone, and every paired phone is already fully trusted.
+- **Alternative:** keep listen-only folders and require adding each one to `sessions.json`.

@@ -17,8 +17,7 @@ export function Sessions() {
   // Sessions you can use now first; folders not open in Codex on the PC wait under Recent.
   const recent = views.filter((v) => !v.needsYou && v.session.unlisted && isOpen(v.session) === false);
   const others = views.filter((v) => !v.needsYou && !recent.includes(v));
-  const talkTo = state.sessions.find((s) => s.id === state.activeSessionId && !s.unlisted) ?? state.sessions.find((s) => !s.unlisted);
-  const conn = state.conn === "open" ? (state.host ?? "Your PC") : state.conn === "connecting" ? "Connecting…" : "Offline";
+  const conn = state.conn === "open" ? (state.host ?? "Your PC") : state.conn === "connecting" ? "Connectingâ€¦" : "Offline";
 
   return (
     <>
@@ -34,7 +33,7 @@ export function Sessions() {
           </button>
         </div>
       </header>
-      <div className={"scroll with-dock" + (player.now ? " tall" : "")}>
+      <div className={"scroll" + (player.now ? " with-dock tall" : "")}>
         <h1 className="title">Sessions</h1>
         {!state.loaded ? (
           <SkeletonList />
@@ -52,15 +51,12 @@ export function Sessions() {
           </>
         )}
       </div>
-      <Dock>
-        {player.now && <MiniPlayer />}
-        {talkTo && (
-          <button type="button" className="btn btn-primary btn-dock press" onClick={() => navigate("/talk?to=" + encodeURIComponent(talkTo.id))}>
-            <Icon name="mic" size={20} stroke={2.2} />
-            <span>Talk to {talkTo.name}</span>
-          </button>
-        )}
-      </Dock>
+      {/* Talk lives on each session and chat, so the home screen only carries the player. */}
+      {player.now && (
+        <Dock>
+          <MiniPlayer />
+        </Dock>
+      )}
     </>
   );
 }
@@ -118,7 +114,7 @@ export function MiniPlayer() {
   const n = player.now!;
   const tick = useNow(500, n.status === "playing");
   const t = elapsedOf(n, tick);
-  const label = n.status === "loading" ? "Preparing audio…" : n.status === "done" ? "Finished" : (n.status === "playing" ? "Reading, " : "Paused, ") + clock(t) + " of " + clock(n.duration);
+  const label = n.status === "loading" ? "Preparing audioâ€¦" : n.status === "done" ? "Finished" : (n.status === "playing" ? "Reading, " : "Paused, ") + clock(t) + " of " + clock(n.duration);
   const open = () => navigate("/a/" + encodeURIComponent(n.answerId));
   return (
     <div className="mini">
@@ -139,3 +135,4 @@ export function MiniPlayer() {
     </div>
   );
 }
+

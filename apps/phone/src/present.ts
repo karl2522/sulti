@@ -115,11 +115,10 @@ export function viewSession(state: AppState, s: SessionInfo, heard: ReadonlySet<
   return { ...base, tone: s.open ? "lagoon" : "muted", icon: "none", label: idleLabel(s), detail: answer ? firstLine(answer.text) : "No answers yet", answer };
 }
 
-/** An idle session: open in Codex on the PC, closed, or (when the PC can't tell) listen only. */
+/** An idle session: open in Codex on the PC, not open, or plain idle when the PC can't tell. */
 export function idleLabel(s: SessionInfo): string {
   if (s.open) return "Open on your PC";
-  if (!s.unlisted) return "Idle";
-  return s.open === false ? "Not open" : "Listen only";
+  return s.unlisted && s.open === false ? "Not open" : "Idle";
 }
 
 /** Open or working in Codex on the PC; null when the PC can't tell. */

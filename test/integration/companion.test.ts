@@ -330,9 +330,11 @@ describe("listen half: Stop hook, dedupe, audio, copy", () => {
     const a2 = (await phone.waitFor((m) => m.type === "answer" && m.turnId === "hook-turn-2")) as Of<"answer">;
     const s = (await phone.waitFor((m) => m.type === "sessions" && m.sessions.some((x) => x.unlisted))) as Of<"sessions">;
     expect(s.sessions.find((x) => x.id === a2.sessionId)).toMatchObject({ name: "demo-app", unlisted: true });
-    // Unlisted sessions can be listened to, not prompted.
+    // They take prompts too; a chat Sulti starts there gets the owner's Codex defaults (only the folder is sent).
     phone.send({ type: "prompt.send", sessionId: a2.sessionId, text: "Hi." });
-    await phone.waitFor((m) => m.type === "toast" && /only listen/.test(m.message));
+    await phone.waitFor((m) => m.type === "answer" && m.sessionId === a2.sessionId && m.source === "appServer");
+    const start = t.mockLog().find((e) => e.method === "thread/start") as { params: Record<string, unknown> };
+    expect(start.params).toEqual({ cwd: "E:\\scratch\\demo-app" });
   });
 
   it("a reconnecting phone gets each session's latest answer, not only the 20 newest", async () => {

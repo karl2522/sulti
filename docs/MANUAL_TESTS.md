@@ -53,7 +53,8 @@ Use the mic key on the iOS keyboard in the message box. Each send is a *live tur
 ## 5. Your own terminals (Stop hook)
 
 - [ ] Install and trust the hook (`scripts\hooks\install-hook.ps1`, then `/hooks` in a Codex terminal).
-- [ ] Finish a turn in a terminal *(live turn)*. Within a few seconds the answer shows on the phone as "From a terminal". A folder that isn't in `sessions.json` appears as a listen-only session, and it's still listed after the companion restarts.
+- [ ] Finish a turn in a terminal *(live turn)*. Within a few seconds the answer shows on the phone as "From a terminal". A folder that isn't in `sessions.json` appears as a session too, and it's still listed after the companion restarts.
+- [ ] Open that session on the phone, tap the chat that's open in the terminal, and send a short message *(live turn)*. It runs in the same chat, and the terminal shows it as it happens.
 
 ## 6. Connection
 

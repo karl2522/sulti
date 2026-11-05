@@ -168,6 +168,13 @@ function Main({ device, onForget }: { device: Device; onForget: () => void }) {
         return;
       case "route.result": {
         const plan = planRoute(m);
+        // A session switch opens that session, once Talk has finished going back.
+        const openSession = (id: string) => {
+          const go = () => navigate("/s/" + encodeURIComponent(id));
+          if (location.pathname.startsWith("/talk")) window.addEventListener("popstate", go, { once: true });
+          else go();
+        };
+        const switchTo = m.intent.kind === "app" && m.intent.action.type === "switchSession" ? m.intent.action.sessionId : null;
         const confirm = (onAccept?: () => void) =>
           openSheet({
             kind: "confirm",
@@ -177,10 +184,11 @@ function Main({ device, onForget }: { device: Device; onForget: () => void }) {
               if (accept) onAccept?.();
             },
           });
-        if (plan.kind === "confirm") return confirm();
+        if (plan.kind === "confirm") return confirm(switchTo ? () => openSession(switchTo) : undefined);
         if (plan.kind === "pickSession")
-          return openSheet({ kind: "pickSession", title: "Which session? I heard “" + plan.spoken + "”", onPick: (id) => send({ type: "session.select", sessionId: id }) });
+          return openSheet({ kind: "pickSession", title: "Which session? I heard “" + plan.spoken + "”", onPick: (id) => send({ type: "session.select", sessionId: id }) && openSession(id) });
         if (plan.kind === "local") return plan.confirm ? confirm(() => runLocal(plan.action)) : runLocal(plan.action);
+        if (switchTo) return openSession(switchTo);
         if (m.intent.kind === "prompt") notify("info", "Sent to " + sessionName(stateRef.current, m.intent.sessionId) + ".");
         else if (m.intent.kind === "codex") notify("info", plan.echo);
         return;
