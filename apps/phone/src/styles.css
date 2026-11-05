@@ -1530,6 +1530,10 @@ textarea.field {
   padding: 4px 20px 24px;
 }
 /* A long list scrolls under the sheet's main button, which stays in reach. */
+/* Children keep their height so the sheet body scrolls; a squeezed list would clip rows out of reach. */
+.sheet-body > * {
+  flex-shrink: 0;
+}
 .sheet-actions {
   position: sticky;
   bottom: -24px;
