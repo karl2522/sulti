@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "../appContext.js";
 import { effortLabel, modelTitle } from "../present.js";
 import { Icon } from "../ui/icons.js";
@@ -17,6 +17,12 @@ export function ChatModelSheet({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     send({ type: "models.list" });
   }, [send]);
+  // Open on the chat's current model, which can sit far down a long list.
+  const list = useRef<HTMLUListElement>(null);
+  const loaded = !!models;
+  useEffect(() => {
+    list.current?.querySelector('[aria-checked="true"]')?.scrollIntoView({ block: "center" });
+  }, [loaded]);
 
   const pickedId = model ?? s?.model ?? models?.find((m) => m.isDefault)?.id;
   const picked = models?.find((m) => m.id === pickedId);
@@ -54,7 +60,7 @@ export function ChatModelSheet({ sessionId }: { sessionId: string }) {
           <ChatSkeletonRows />
         </ul>
       ) : (
-        <ul className="group" role="radiogroup" aria-label="Model">
+        <ul ref={list} className="group" role="radiogroup" aria-label="Model">
           {models.map((m) => {
             const on = m.id === picked?.id;
             return (
@@ -79,4 +85,3 @@ export function ChatModelSheet({ sessionId }: { sessionId: string }) {
     </div>
   );
 }
-
