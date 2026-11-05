@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { route, type ActivityItem, type CompanionMessage, type Goal, type Intent, type PhoneMessage, toSpeechText } from "@sulti/core";
+import { route, type ActivityItem, type CompanionMessage, type Goal, type Intent, type PhoneMessage, type ThreadSummary, toSpeechText } from "@sulti/core";
 import type { V2 } from "@sulti/protocol";
 import { upsertActivity } from "./activity.js";
 import { MAX_ANSWERS, type AnswerStore } from "./answers.js";
@@ -155,6 +155,8 @@ export class Hub {
     if (answer) this.broadcast({ type: "answer", ...answer });
   }
   private readonly sessionsKnown = new Set<string>();
+  /** Each session's last chat list, sent first while a fresh one loads. */
+  private readonly chatLists = new Map<string, ThreadSummary[]>();
 
   async handle(c: PhoneClient, msg: PhoneMessage): Promise<void> {
     try {
@@ -229,12 +231,13 @@ export class Hub {
         return this.audioUrl(c, msg.answerId);
       case "thread.list": {
         const s = this.session(msg.sessionId);
-        const threads = await this.bridge.listThreads(s);
-        return c.send({
-          type: "threads",
-          sessionId: s.id,
-          threads: threads.map((t) => ({ id: t.id, preview: t.preview.slice(0, 200), name: t.name, updatedAt: t.updatedAt, ...this.d.chatState?.(t.id) })),
-        });
+        // Codex can take seconds to list a folder's chats: send the last list right away, then the fresh one.
+        const send = (list: ThreadSummary[]) => c.send({ type: "threads", sessionId: s.id, threads: list.map((t) => ({ ...t, ...this.d.chatState?.(t.id) })) });
+        const cached = this.chatLists.get(s.id);
+        if (cached) send(cached);
+        const fresh = (await this.bridge.listThreads(s)).map((t) => ({ id: t.id, preview: t.preview.slice(0, 200), name: t.name, updatedAt: t.updatedAt }));
+        this.chatLists.set(s.id, fresh);
+        return send(fresh);
       }
       case "thread.attach": {
         const s = this.session(msg.sessionId);
@@ -397,4 +400,3 @@ export class Hub {
     };
   }
 }
-

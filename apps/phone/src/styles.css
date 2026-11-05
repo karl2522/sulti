@@ -752,6 +752,58 @@ code,
 .skeleton .avatar {
   animation: breathe-sk 1.1s ease-in-out infinite alternate;
 }
+/* Chat placeholders: the same box as a chat row (14 + 22 + 2 + 20 + 14 px), so real rows land without a jump.
+   They wait 120 ms before showing, so a fast answer never flashes them, then breathe in a slow wave. */
+.sk-row {
+  gap: 14px;
+  padding: 14px 12px 14px 16px;
+  animation: fade 200ms var(--ease-out) 120ms both;
+}
+.sk-row .sk {
+  animation-delay: calc(var(--i, 0) * 140ms);
+}
+.sk-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+.sk-row .sk-title {
+  width: 62%;
+  margin: 3px 0;
+}
+.sk-row:nth-child(3n) .sk-title {
+  width: 46%;
+}
+.sk-row:nth-child(3n + 1) .sk-title {
+  width: 54%;
+}
+.sk-row .sk-short {
+  width: 34%;
+  margin: 3px 0;
+}
+/* Real rows replacing the placeholders: a short rise, 40 ms apart. */
+.chat-in {
+  animation: rise 260ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+/* Same box as a placeholder row; it fades in where the chats would be. */
+.load-failed {
+  animation-delay: 0ms;
+  color: var(--muted);
+}
+.load-failed .row-title {
+  color: var(--text);
+}
+.load-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 15px;
+  color: var(--muted);
+}
 
 /* ---------- dock ---------- */
 .dock {
@@ -1775,6 +1827,7 @@ textarea.field {
   .page-back,
   .page-up,
   .stagger,
+  .chat-in,
   .empty,
   .mini,
   .stop-btn,

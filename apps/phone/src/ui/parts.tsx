@@ -65,6 +65,40 @@ export function Dock({ children, className = "" }: { children: ReactNode; classN
   return <div className={"dock " + className}>{children}</div>;
 }
 
+/** Placeholder chat rows, shaped like the real ones so nothing jumps when they arrive. */
+export function ChatSkeletonRows({ rows = 3 }: { rows?: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }, (_, i) => (
+        <li key={i} className="row sk-row" style={nth(i)} aria-hidden="true">
+          <span className="sk sk-icon" />
+          <span className="row-text">
+            <span className="sk sk-title" />
+            <span className="sk sk-line sk-short" />
+          </span>
+        </li>
+      ))}
+    </>
+  );
+}
+
+const SLOW_MS = 4000;
+const GIVE_UP_MS = 20_000;
+
+/** While `waiting`: "loading", then "slow" after 4 s, then "failed" after 20 s. `retry` starts over. */
+export function useLoadPhase(waiting: boolean): ["loading" | "slow" | "failed", () => void] {
+  const [phase, setPhase] = useState<"loading" | "slow" | "failed">("loading");
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    setPhase("loading");
+    if (!waiting) return;
+    const slow = setTimeout(() => setPhase("slow"), SLOW_MS);
+    const fail = setTimeout(() => setPhase("failed"), GIVE_UP_MS);
+    return () => (clearTimeout(slow), clearTimeout(fail));
+  }, [waiting, attempt]);
+  return [phase, () => setAttempt((a) => a + 1)];
+}
+
 export function SkeletonList({ rows = 3 }: { rows?: number }) {
   return (
     <ul className="group skeleton" aria-busy="true" aria-label="Loading sessions">

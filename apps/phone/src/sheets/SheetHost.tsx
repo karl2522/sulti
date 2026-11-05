@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useApp, type SheetSpec } from "../appContext.js";
 import { chatState, firstLine } from "../present.js";
 import { Icon } from "../ui/icons.js";
-import { Avatar } from "../ui/parts.js";
+import { Avatar, ChatSkeletonRows } from "../ui/parts.js";
 import { Sheet, useSheetClose } from "../ui/Sheet.js";
 import { ApprovalSheet } from "./Approval.js";
 import { PairRequestSheet } from "./PairRequest.js";
@@ -89,7 +89,9 @@ function Threads({ sessionId }: { sessionId: string }) {
         </li>
       </ul>
       {!threads ? (
-        <span className="sk sk-line" aria-label="Loading chats" />
+        <ul className="group" aria-busy="true" aria-label="Loading chats">
+          <ChatSkeletonRows />
+        </ul>
       ) : !threads.length ? (
         <p className="muted">No chats in this folder yet.</p>
       ) : (

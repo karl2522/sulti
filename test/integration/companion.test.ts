@@ -253,6 +253,17 @@ describe("companion against the mock app-server", () => {
     expect(Object.keys(resume.params).sort()).toEqual(["excludeTurns", "threadId"]);
   });
 
+  it("sends the last chat list at once, then the fresh one", async () => {
+    const seed = JSON.stringify([{ id: "thread-old-1", cwd: "D:\\work\\lead-tracker", preview: "Fix the import" }]);
+    const { phone } = await setup({ mockArgs: ["--seed", seed] });
+    phone.send({ type: "thread.list", sessionId: "lead-tracker" });
+    await phone.waitFor("threads");
+    const mark = phone.mark();
+    phone.send({ type: "thread.list", sessionId: "lead-tracker" });
+    // The remembered list right away, then the fresh one.
+    await phone.waitFor((m) => m.type === "threads" && phone.received.slice(mark).filter((x) => x.type === "threads").length === 2, 8000, mark);
+  });
+
   it("a chat that fails to reopen is an error, never a silent new chat", async () => {
     const seed = JSON.stringify([{ id: "thread-broken", cwd: "D:\\work\\lead-tracker", preview: "[broken] Half done" }]);
     const dataDir = mkdtempSync(join(tmpdir(), "sulti-it-"));

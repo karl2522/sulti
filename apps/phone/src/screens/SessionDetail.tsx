@@ -1,12 +1,12 @@
 import type { ActivityItem, Goal, SessionInfo, ThreadSummary } from "@sulti/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "../appContext.js";
 import { activityVerb, ago, chatState, firstLine, idleLabel, span } from "../present.js";
 import { navigate } from "../router.js";
 import { latestAnswer } from "../state.js";
 import { AnswerControls } from "../ui/AnswerControls.js";
 import { Icon, Spinner, type IconName } from "../ui/icons.js";
-import { Dock, nth, PageHeader, useNow } from "../ui/parts.js";
+import { ChatSkeletonRows, Dock, nth, PageHeader, useLoadPhase, useNow } from "../ui/parts.js";
 
 const ACTIVITY_ICON: Record<ActivityItem["kind"], IconName> = { read: "file", search: "search", list: "folder", command: "terminal", edit: "pencil" };
 const SKILLS_SHOWN = 5;
@@ -16,6 +16,9 @@ const CHATS_SHOWN = 6;
 function Chats({ s, busy, i }: { s: SessionInfo; busy: boolean; i: number }) {
   const { state, send, openSheet } = useApp();
   const threads = state.threads[s.id];
+  const [phase, retry] = useLoadPhase(!threads && state.conn === "open");
+  // Rows that replace the placeholders rise in; rows already known when the page opened don't.
+  const arrived = useRef(!threads).current;
   // Point the session at the chat (the server queues it before the next message), then talk.
   const open = (threadId: string | null) => {
     const ok = threadId === null ? !s.threadId || send({ type: "thread.new", sessionId: s.id }) : threadId === s.threadId || send({ type: "thread.attach", sessionId: s.id, threadId });
@@ -26,7 +29,7 @@ function Chats({ s, busy, i }: { s: SessionInfo; busy: boolean; i: number }) {
   return (
     <section className="section stagger" style={nth(i)} aria-label="Chats">
       <h2 className="section-title">Chats</h2>
-      <ul className="group">
+      <ul className="group" aria-busy={!threads}>
         <li className="row">
           <button type="button" className="row-main press-row" disabled={busy && !!s.threadId} aria-label={"New chat" + (s.threadId ? "" : ", current")} onClick={() => open(null)}>
             <Icon name="plus" size={20} stroke={2.2} />
@@ -38,15 +41,26 @@ function Chats({ s, busy, i }: { s: SessionInfo; busy: boolean; i: number }) {
           </button>
         </li>
         {!threads ? (
-          <li className="row">
-            <span className="sk sk-line" aria-label="Loading chats" />
-          </li>
+          phase !== "failed" ? (
+            <ChatSkeletonRows />
+          ) : (
+            <li className="row sk-row load-failed" role="status">
+              <Icon name="alert" size={20} />
+              <span className="row-text">
+                <span className="row-title">Couldn't load the chats</span>
+                <span className="row-detail">Your PC didn't answer.</span>
+              </span>
+              <button type="button" className="btn btn-soft press" onClick={() => send({ type: "thread.list", sessionId: s.id }) && retry()}>
+                Try again
+              </button>
+            </li>
+          )
         ) : (
-          shown.map((t) => {
+          shown.map((t, n) => {
             const current = t.id === s.threadId;
             const title = t.name ?? firstLine(t.preview || "Untitled chat", 120);
             return (
-              <li key={t.id} className="row">
+              <li key={t.id} className={"row" + (arrived ? " chat-in" : "")} style={arrived ? nth(n) : undefined}>
                 <button type="button" className="row-main press-row" disabled={busy && !current} aria-label={"Chat: " + title + (current ? ", current" : "")} onClick={() => open(t.id)}>
                   {t.working ? <Spinner size={18} /> : <Icon name="chat" size={20} />}
                   <span className="row-text">
@@ -60,6 +74,12 @@ function Chats({ s, busy, i }: { s: SessionInfo; busy: boolean; i: number }) {
           })
         )}
       </ul>
+      {!threads && state.conn !== "open" && <p className="load-note">Chats load when Sulti reconnects to your PC.</p>}
+      {!threads && state.conn === "open" && phase === "slow" && (
+        <p className="load-note fade-in" role="status">
+          Getting the chats from your PC…
+        </p>
+      )}
       {threads && threads.length > CHATS_SHOWN && (
         <button type="button" className="link-btn press" onClick={() => openSheet({ kind: "threads", sessionId: s.id })}>
           Show all {threads.length} chats
@@ -300,4 +320,3 @@ function GoalCard({ s, goal, i }: { s: SessionInfo; goal: Goal | null | undefine
     </section>
   );
 }
-
